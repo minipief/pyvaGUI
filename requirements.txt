@@ -1,0 +1,5 @@
+# All required Python packages for the project
+pyqt6
+pyva
+numpy
+matplotlib
