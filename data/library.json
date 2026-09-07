@@ -1,0 +1,22 @@
+{
+  "materialien": [
+    {
+      "typ": "Fluid",
+      "name": "Luft",
+      "c0": 343.0,
+      "rho0": 1.23
+    },
+    {
+      "typ": "EquivalentFluid",
+      "name": "Faser 30kg",
+      "c0": 343.0,
+      "rho0": 1.23,
+      "porosity": 0.98,
+      "flow_res": 25000,
+      "tortuosity": 1.02,
+      "rho_bulk": 30.0,
+      "length_visc": 9e-05,
+      "length_therm": 0.00018
+    }
+  ]
+}
