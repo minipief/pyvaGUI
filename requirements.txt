@@ -1,5 +1,5 @@
 # All required Python packages for the project
 pyqt6
-pyva
+pyva-toolbox
 numpy
 matplotlib
