@@ -4,19 +4,86 @@
       "typ": "Fluid",
       "name": "Luft",
       "c0": 343.0,
-      "rho0": 1.23
+      "rho0": 1.23,
+      "eta": 0.01,
+      "dynamic_viscosity": 1.84e-05,
+      "kappa": 1.4,
+      "Cp": 1005.1,
+      "heat_conductivity": 0.0257673
     },
     {
       "typ": "EquivalentFluid",
       "name": "Faser 30kg",
       "c0": 343.0,
       "rho0": 1.23,
+      "eta": 0.0,
+      "dynamic_viscosity": 1.84e-05,
+      "kappa": 1.4,
+      "Cp": 1005.1,
+      "heat_conductivity": 0.0257673,
       "porosity": 0.98,
       "flow_res": 25000,
       "tortuosity": 1.02,
       "rho_bulk": 30.0,
       "length_visc": 9e-05,
-      "length_therm": 0.00018
+      "length_therm": 0.00018,
+      "limp": true
+    },
+    {
+      "typ": "DelanyBazley",
+      "name": "Faser (Delany-Bazley)",
+      "c0": 343.0,
+      "rho0": 1.23,
+      "eta": 0.0,
+      "dynamic_viscosity": 1.84e-05,
+      "kappa": 1.4,
+      "Cp": 1005.1,
+      "heat_conductivity": 0.0257673,
+      "flow_res": 25000,
+      "miki": false
+    },
+    {
+      "typ": "Solid",
+      "name": "Aluminium",
+      "E": 71000000000.0,
+      "rho0": 2700.0,
+      "nu": 0.34,
+      "eta": 0.01
+    },
+    {
+      "typ": "PoroElasticMat",
+      "name": "Schaum (poroelastisch)",
+      "c0": 343.0,
+      "rho0": 1.23,
+      "dynamic_viscosity": 1.84e-05,
+      "kappa": 1.4,
+      "Cp": 1005.1,
+      "heat_conductivity": 0.0257673,
+      "porosity": 0.98,
+      "flow_res": 25000.0,
+      "tortuosity": 1.02,
+      "length_visc": 9e-05,
+      "length_therm": 0.00018,
+      "limp": true,
+      "solid_mat": {
+        "typ": "Solid",
+        "name": "Aluminium",
+        "E": 71000000000.0,
+        "rho0": 2700.0,
+        "nu": 0.34,
+        "eta": 0.01
+      }
+    },
+    {
+      "typ": "Fluid",
+      "name": "Wasser",
+      "c0": 343.0,
+      "rho0": 10.23,
+      "eta": 0.01,
+      "dynamic_viscosity": 1.84e-05,
+      "kappa": 1.4,
+      "Cp": 1005.1,
+      "heat_conductivity": 0.0257673
     }
   ]
 }

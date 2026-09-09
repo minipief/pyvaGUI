@@ -3,3 +3,5 @@ pyqt6
 pyva-toolbox
 numpy
 matplotlib
+
+# pyva-toolbox is necessary, but for development, it is imported directly from the cloned git repo
