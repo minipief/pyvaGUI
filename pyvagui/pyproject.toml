@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyvagui"
+version = "0.1.0"
+description = "Graphical user interface for infinite layer calculations with pyva"
+requires-python = ">=3.13"
+license = { text = "GPL-3.0-or-later" }
+dependencies = [
+    "PyQt6",
+    "matplotlib",
+    "numpy<2.4", # pyva fails with higher version (array-to-scalar TypeError)
+    "pyva-toolbox",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-qt",
+    "flake8",
+]
+
+[tool.setuptools.packages.find]
+include = ["pyvagui*"]
+
+[tool.setuptools.package-data]
+pyvagui = ["resources/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

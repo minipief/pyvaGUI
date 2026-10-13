@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "materials": [
+    {
+      "name": "Air",
+      "id": "7cbaf36e84a44e3ab089e4ae32b51e57",
+      "c0": 343.0,
+      "rho0": 1.23,
+      "dynamic_viscosity": 1.84e-05,
+      "kappa": 1.4,
+      "Cp": 1005.1,
+      "heat_conductivity": 0.0257673,
+      "eta": 0.01,
+      "type": "fluid"
+    },
+    {
+      "name": "Aluminium",
+      "id": "c82df8d5a5f74637bfbcc3cb690dc9a6",
+      "E": 71000000000.0,
+      "rho0": 2700.0,
+      "nu": 0.34,
+      "eta": 0.01,
+      "type": "isomat"
+    },
+    {
+      "name": "Steel",
+      "id": "f030f7e5bcd34f959df814e0c29a63d3",
+      "E": 150000000000.0,
+      "rho0": 7800.0,
+      "nu": 0.27,
+      "eta": 0.01,
+      "type": "isomat"
+    },
+    {
+      "name": "Glass wool",
+      "id": "2c6b1706d38f44f290bacdec020b5124",
+      "c0": 343.0,
+      "rho0": 1.23,
+      "dynamic_viscosity": 1.84e-05,
+      "kappa": 1.4,
+      "Cp": 1005.1,
+      "heat_conductivity": 0.0257673,
+      "eta": 0.01,
+      "flow_res": 25000.0,
+      "porosity": 0.98,
+      "tortuosity": 1.02,
+      "rho_bulk": 31.176,
+      "length_visc": 9.0e-05,
+      "length_therm": 0.00018,
+      "limp": true,
+      "type": "equivalent_fluid"
+    },
+    {
+      "name": "Delany-Bazley fibre",
+      "id": "bca86e84f6e447858a3724cc2a7d6fa9",
+      "c0": 343.0,
+      "rho0": 1.23,
+      "dynamic_viscosity": 1.84e-05,
+      "kappa": 1.4,
+      "Cp": 1005.1,
+      "heat_conductivity": 0.0257673,
+      "eta": 0.01,
+      "flow_res": 25000.0,
+      "miki": false,
+      "type": "delany_bazley"
+    }
+  ]
+}
