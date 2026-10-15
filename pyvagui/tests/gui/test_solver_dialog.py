@@ -171,13 +171,15 @@ def test_solver_invalid_values_show_all_errors_and_keep_dialog_open(
 
     dialog.save_solver()
 
+    banner = dialog.error_label.text()
     assert dialog.isVisible()
-    assert len(messages) == 1
-    assert "Start frequency must be a finite number" in messages[0]
-    assert "Number of points must be an integer" in messages[0]
-    assert "Solver name must not be empty" in messages[0]
-    assert "Select at least one layup" in messages[0]
-    assert "Angle must be in [0, 90)" in messages[0]
+    assert not messages
+    assert dialog.error_label.isVisible()
+    assert "Start frequency must be a finite number" in banner
+    assert "Number of points must be an integer" in banner
+    assert "Solver name must not be empty" in banner
+    assert "Select at least one layup" in banner
+    assert "Angle must be in [0, 90)" in banner
 
 
 def test_edit_solver_uses_copy_and_restricts_layup_list(qtbot):

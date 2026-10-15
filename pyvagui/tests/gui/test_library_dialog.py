@@ -34,11 +34,69 @@ def test_library_list_stores_material_ids(qtbot, tmp_path):
     dialog = LibraryDialog(Project(), library)
     qtbot.addWidget(dialog)
 
-    item = dialog.material_list.item(0)
+    item = dialog.material_tree.topLevelItem(0).child(0)
 
-    assert item.text() == "Air (Fluid)"
-    assert item.data(Qt.ItemDataRole.UserRole) == air.id
-    assert dialog.material_list.count() == 3
+    assert item.text(0) == "Air"
+    assert item.data(0, Qt.ItemDataRole.UserRole) == air.id
+    assert not item.icon(0).isNull()
+    assert not dialog.material_tree.topLevelItem(0).icon(0).isNull()
+    assert [dialog.material_tree.topLevelItem(index).text(0)
+            for index in range(5)] == [
+        "Fluid", "Equivalent fluid", "Delany-Bazley", "Isomat", "Poroelastic"
+    ]
+
+
+def test_library_sorts_names_and_selects_category_folder(qtbot, tmp_path):
+    """Sort categories and include all folder materials in selection."""
+    library, _, _, _ = make_library(tmp_path)
+    library.materials.extend([
+        FluidSpec(name="water"), FluidSpec(name="Argon")
+    ])
+    dialog = LibraryDialog(Project(), library)
+    qtbot.addWidget(dialog)
+    fluid_group = dialog.material_tree.topLevelItem(0)
+
+    assert [fluid_group.child(index).text(0) for index in range(3)] == [
+        "Air", "Argon", "water"
+    ]
+    assert not dialog.add_to_project_button.isEnabled()
+    assert not dialog.export_button.isEnabled()
+    assert not dialog.delete_button.isEnabled()
+    assert dialog.delete_button.text() == ""
+    assert dialog.delete_button.accessibleName() == "Delete selected materials"
+    assert not dialog.delete_button.icon().isNull()
+    assert dialog.close_button.text() == ""
+    assert dialog.close_button.accessibleName() == "Close material library"
+    assert not dialog.close_button.icon().isNull()
+    dialog.material_tree.setCurrentItem(fluid_group)
+    assert dialog.add_to_project_button.isEnabled()
+    assert dialog.export_button.isEnabled()
+    assert dialog.delete_button.isEnabled()
+    assert set(dialog._selected_ids()) == {
+        fluid_group.child(index).data(0, Qt.ItemDataRole.UserRole)
+        for index in range(fluid_group.childCount())
+    }
+
+
+def test_selecting_library_folder_adds_all_contained_materials(
+    qtbot, tmp_path
+):
+    """Import every material in a selected category folder."""
+    library, air, _, _ = make_library(tmp_path)
+    argon = FluidSpec(name="Argon")
+    library.materials.append(argon)
+    project = Project()
+    dialog = LibraryDialog(project, library)
+    qtbot.addWidget(dialog)
+    dialog.material_tree.setCurrentItem(dialog.material_tree.topLevelItem(0))
+
+    dialog.add_to_project()
+
+    assert {material.name for material in project.materials} == {
+        air.name, argon.name
+    }
+    assert all(material.id not in {air.id, argon.id}
+               for material in project.materials)
 
 
 def test_add_selected_material_to_project_creates_new_id(
@@ -51,8 +109,13 @@ def test_add_selected_material_to_project_creates_new_id(
     project = Project()
     dialog = LibraryDialog(project, library)
     qtbot.addWidget(dialog)
-    dialog.material_list.setCurrentRow(0)
-    monkeypatch.setattr(QMessageBox, "information", lambda *args: None)
+    dialog.material_tree.setCurrentItem(
+        dialog.material_tree.topLevelItem(0).child(0)
+    )
+    messages = []
+    monkeypatch.setattr(
+        QMessageBox, "information", lambda *args: messages.append(args)
+    )
 
     dialog.add_to_project()
 
@@ -60,6 +123,8 @@ def test_add_selected_material_to_project_creates_new_id(
     assert project.materials[0].name == air.name
     assert project.materials[0].id != air.id
     assert project.is_modified
+    assert not messages
+    assert dialog.status_label.text() == "Added 1 material(s) to the project."
 
 
 def test_add_poroelastic_material_also_copies_selected_frame(
@@ -67,12 +132,14 @@ def test_add_poroelastic_material_also_copies_selected_frame(
     tmp_path,
     monkeypatch,
 ):
-    """Ask before copying a missing frame and remap the new frame ID."""
+    """Copy a missing frame automatically and remap the new frame ID."""
     library, _, frame, foam = make_library(tmp_path)
     project = Project()
     dialog = LibraryDialog(project, library)
     qtbot.addWidget(dialog)
-    dialog.material_list.setCurrentRow(2)
+    dialog.material_tree.setCurrentItem(
+        dialog.material_tree.topLevelItem(4).child(0)
+    )
     questions = []
 
     def answer_yes(*args):
@@ -94,7 +161,7 @@ def test_add_poroelastic_material_also_copies_selected_frame(
         for material in project.materials
         if isinstance(material, PoroElasticMatSpec)
     )
-    assert len(questions) == 1
+    assert not questions
     assert copied_frame.id != frame.id
     assert copied_foam.id != foam.id
     assert copied_foam.solid_mat_id == copied_frame.id
@@ -115,7 +182,9 @@ def test_selection_only_returns_copy_without_changing_project(
         selection_only=True,
     )
     qtbot.addWidget(dialog)
-    dialog.material_list.setCurrentRow(2)
+    dialog.material_tree.setCurrentItem(
+        dialog.material_tree.topLevelItem(4).child(0)
+    )
     monkeypatch.setattr(
         QMessageBox,
         "question",
@@ -172,7 +241,7 @@ def test_import_materials_action_adds_new_ids_and_saves_library(
     assert len(library.materials) == 1
     assert imported_material.id != imported_source.id
     assert library.path.exists()
-    assert dialog.material_list.count() == 1
+    assert dialog.material_tree.topLevelItem(0).childCount() == 1
 
 
 def test_export_selected_action_adds_json_extension(
@@ -184,7 +253,9 @@ def test_export_selected_action_adds_json_extension(
     library, air, _, _ = make_library(tmp_path)
     dialog = LibraryDialog(Project(), library)
     qtbot.addWidget(dialog)
-    dialog.material_list.setCurrentRow(0)
+    dialog.material_tree.setCurrentItem(
+        dialog.material_tree.topLevelItem(0).child(0)
+    )
     export_path = tmp_path / "selected-materials"
     monkeypatch.setattr(
         QFileDialog,
@@ -208,7 +279,9 @@ def test_delete_selected_removes_material_from_library(
     library, air, _, _ = make_library(tmp_path)
     dialog = LibraryDialog(Project(), library)
     qtbot.addWidget(dialog)
-    dialog.material_list.setCurrentRow(0)
+    dialog.material_tree.setCurrentItem(
+        dialog.material_tree.topLevelItem(0).child(0)
+    )
     monkeypatch.setattr(
         QMessageBox,
         "question",
@@ -218,7 +291,31 @@ def test_delete_selected_removes_material_from_library(
     dialog.delete_selected()
 
     assert library.materials[0].id != air.id
-    assert dialog.material_list.count() == 2
+    assert dialog.material_tree.topLevelItem(0).childCount() == 0
+
+
+def test_delete_selected_library_folder_removes_all_materials(
+    qtbot, tmp_path, monkeypatch
+):
+    """Delete every library material contained in a selected category."""
+    library, air, _, _ = make_library(tmp_path)
+    argon = FluidSpec(name="Argon")
+    library.materials.append(argon)
+    dialog = LibraryDialog(Project(), library)
+    qtbot.addWidget(dialog)
+    dialog.material_tree.topLevelItem(0).setSelected(True)
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args: QMessageBox.StandardButton.Yes,
+    )
+
+    dialog.delete_selected()
+
+    assert not any(
+        material.id in {air.id, argon.id} for material in library.materials
+    )
+    assert dialog.material_tree.topLevelItem(0).childCount() == 0
 
 
 def test_delete_frame_is_blocked_when_library_material_uses_it(
@@ -230,7 +327,9 @@ def test_delete_frame_is_blocked_when_library_material_uses_it(
     library, _, frame, _ = make_library(tmp_path)
     dialog = LibraryDialog(Project(), library)
     qtbot.addWidget(dialog)
-    dialog.material_list.setCurrentRow(1)
+    dialog.material_tree.setCurrentItem(
+        dialog.material_tree.topLevelItem(3).child(0)
+    )
     messages = []
     monkeypatch.setattr(
         QMessageBox,

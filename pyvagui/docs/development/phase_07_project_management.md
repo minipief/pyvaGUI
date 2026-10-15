@@ -56,8 +56,8 @@ standard dialogs so no interactive windows or user files are involved.
 
 ## How to verify manually
 
-Run `python -m pyvagui`. Create a project, save it as JSON, open it again,
-and inspect the grouped tree. Mark it modified through a project change
+Run `python -m pyvagui`. Create a project, save it as a `.pyvagui` file,
+open it again, and inspect the grouped tree. Mark it modified through a project change
 and try New, Open, or closing; Save, Discard, and Cancel should behave
 consistently.
 

@@ -7,21 +7,35 @@ from PyQt6.QtWidgets import (
     QDialog,
     QFileDialog,
     QHBoxLayout,
-    QListWidget,
-    QListWidgetItem,
+    QLabel,
     QMessageBox,
     QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from pyvagui.gui.tree_icons import ACTION_ICONS, TREE_ICONS
 from pyvagui.model.library import MaterialLibrary
 from pyvagui.model.materials import (
+    DelanyBazleySpec,
+    EquivalentFluidSpec,
+    FluidSpec,
     IsoMatSpec,
     MaterialSpec,
     PoroElasticMatSpec,
 )
 from pyvagui.model.project import Project
+
+
+MATERIAL_GROUPS = (
+    ("Fluid", FluidSpec),
+    ("Equivalent fluid", EquivalentFluidSpec),
+    ("Delany-Bazley", DelanyBazleySpec),
+    ("Isomat", IsoMatSpec),
+    ("Poroelastic", PoroElasticMatSpec),
+)
 
 
 class LibraryDialog(QDialog):
@@ -56,6 +70,7 @@ class LibraryDialog(QDialog):
         self.additional_materials: list[MaterialSpec] = []
 
         self.setWindowTitle("Material library")
+        self.resize(720, 520)
         self._build_interface()
         try:
             if not self.library.materials:
@@ -66,15 +81,27 @@ class LibraryDialog(QDialog):
 
     def _build_interface(self) -> None:
         """Create the material list and library action buttons."""
-        # QListWidget provides a simple list with built-in multiple selection.
         layout = QVBoxLayout(self)
-        self.material_list = QListWidget(self)
-        self.material_list.setSelectionMode(
-            QListWidget.SelectionMode.SingleSelection
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        self.material_tree = QTreeWidget(self)
+        self.material_tree.setHeaderHidden(True)
+        self.material_tree.setIndentation(14)
+        self.material_tree.setUniformRowHeights(True)
+        self.material_tree.setSelectionMode(
+            QTreeWidget.SelectionMode.SingleSelection
             if self.selection_only
-            else QListWidget.SelectionMode.ExtendedSelection
+            else QTreeWidget.SelectionMode.ExtendedSelection
         )
-        layout.addWidget(self.material_list)
+        self.material_tree.itemSelectionChanged.connect(
+            self._update_selection_actions
+        )
+        layout.addWidget(self.material_tree)
+        self.status_label = QLabel(self)
+        self.status_label.setObjectName("successBanner")
+        self.status_label.setWordWrap(True)
+        self.status_label.hide()
+        layout.addWidget(self.status_label)
 
         actions = QHBoxLayout()
         self.add_to_project_button = QPushButton("Add to project", self)
@@ -95,26 +122,62 @@ class LibraryDialog(QDialog):
         self.delete_button.setVisible(not self.selection_only)
         self.import_button.setVisible(not self.selection_only)
         self.export_button.setVisible(not self.selection_only)
+        self.add_to_project_button.setObjectName("primaryButton")
+        self.delete_button.setObjectName("dangerButton")
+        self.add_to_project_button.setIcon(ACTION_ICONS["plus-white"])
+        self.import_button.setIcon(ACTION_ICONS["import"])
+        self.export_button.setIcon(ACTION_ICONS["export"])
+        self.delete_button.setIcon(ACTION_ICONS["trash"])
+        self.delete_button.setText("")
+        self.delete_button.setToolTip("Delete selected materials")
+        self.delete_button.setAccessibleName("Delete selected materials")
+        self.delete_button.setFixedSize(38, 38)
+        self.close_button.setIcon(ACTION_ICONS["close"])
+        self.close_button.setText("")
+        self.close_button.setToolTip("Close material library")
+        self.close_button.setAccessibleName("Close material library")
+        self.close_button.setFixedSize(38, 38)
 
         for button in (
-            self.add_to_project_button,
             self.import_button,
             self.export_button,
             self.delete_button,
-            self.close_button,
         ):
             actions.addWidget(button)
+        actions.addStretch(1)
+        actions.addWidget(self.close_button)
+        actions.addWidget(self.add_to_project_button)
         layout.addLayout(actions)
 
     def refresh(self) -> None:
         """Rebuild visible material names from the library model."""
-        self.material_list.clear()
-        for material in self.library.materials:
-            item = QListWidgetItem(
-                f"{material.name} ({self._type_name(material)})"
+        self.material_tree.clear()
+        for name, material_type in MATERIAL_GROUPS:
+            group = QTreeWidgetItem([name])
+            group.setIcon(0, TREE_ICONS["folder"])
+            group.setChildIndicatorPolicy(
+                QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator
             )
-            item.setData(Qt.ItemDataRole.UserRole, material.id)
-            self.material_list.addItem(item)
+            self.material_tree.addTopLevelItem(group)
+            materials = sorted(
+                (material for material in self.library.materials
+                 if isinstance(material, material_type)),
+                key=lambda material: material.name.casefold(),
+            )
+            for material in materials:
+                item = QTreeWidgetItem([material.name])
+                item.setIcon(0, TREE_ICONS["material"])
+                item.setData(0, Qt.ItemDataRole.UserRole, material.id)
+                group.addChild(item)
+        self.material_tree.expandAll()
+        self._update_selection_actions()
+
+    def _update_selection_actions(self) -> None:
+        """Enable material commands only when material rows are selected."""
+        has_selection = bool(self._selected_ids())
+        self.add_to_project_button.setEnabled(has_selection)
+        self.export_button.setEnabled(has_selection)
+        self.delete_button.setEnabled(has_selection)
 
     def add_to_project(self) -> None:
         """Copy the selected material or materials into the project.
@@ -124,11 +187,6 @@ class LibraryDialog(QDialog):
         """
         selected = self._selected_library_materials()
         if not selected:
-            QMessageBox.information(
-                self,
-                "Material library",
-                "Select at least one material.",
-            )
             return
 
         copies = self._prepare_copies(selected)
@@ -156,11 +214,10 @@ class LibraryDialog(QDialog):
             QMessageBox.warning(self, "Material library", str(error))
             return
         self.refresh()
-        QMessageBox.information(
-            self,
-            "Material library",
-            f"Added {len(copies)} material(s) to the project.",
+        self.status_label.setText(
+            f"Added {len(copies)} material(s) to the project."
         )
+        self.status_label.show()
 
     def _prepare_copies(
         self,
@@ -199,15 +256,7 @@ class LibraryDialog(QDialog):
             )
             if not isinstance(frame, IsoMatSpec):
                 continue
-            answer = QMessageBox.question(
-                self,
-                "Frame material",
-                f"Also add frame material '{frame.name}'?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
-            )
-            if answer == QMessageBox.StandardButton.Yes:
-                copies[frame.id] = self.project.copy_from_library(frame)
+            copies[frame.id] = self.project.copy_from_library(frame)
 
         for original in selected:
             if not isinstance(original, PoroElasticMatSpec):
@@ -241,11 +290,6 @@ class LibraryDialog(QDialog):
         """Export selected library materials to a JSON file."""
         selected_ids = self._selected_ids()
         if not selected_ids:
-            QMessageBox.information(
-                self,
-                "Export materials",
-                "Select at least one material.",
-            )
             return
         path, _ = QFileDialog.getSaveFileName(
             self,
@@ -301,10 +345,21 @@ class LibraryDialog(QDialog):
         self.refresh()
 
     def _selected_ids(self) -> list[str]:
-        """Return selected library identifiers in visible row order."""
+        """Return selected IDs, including materials in selected folders."""
+        selected_ids = set()
+        for item in self.material_tree.selectedItems():
+            object_id = item.data(0, Qt.ItemDataRole.UserRole)
+            if object_id is not None:
+                selected_ids.add(object_id)
+                continue
+            selected_ids.update(
+                item.child(index).data(0, Qt.ItemDataRole.UserRole)
+                for index in range(item.childCount())
+            )
         return [
-            item.data(Qt.ItemDataRole.UserRole)
-            for item in self.material_list.selectedItems()
+            material.id
+            for material in self.library.materials
+            if material.id in selected_ids
         ]
 
     def _selected_library_materials(self) -> list[MaterialSpec]:
@@ -315,19 +370,3 @@ class LibraryDialog(QDialog):
             for material in self.library.materials
             if material.id in selected_ids
         ]
-
-    @staticmethod
-    def _type_name(material: MaterialSpec) -> str:
-        """Return the readable type name used in a library list row.
-
-        Parameters
-        ----------
-        material : MaterialSpec
-            Material whose display type is requested.
-
-        Returns
-        -------
-        str
-            Human-readable material type.
-        """
-        return type(material).__name__.removesuffix("Spec")

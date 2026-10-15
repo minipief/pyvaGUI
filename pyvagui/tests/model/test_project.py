@@ -58,7 +58,7 @@ def make_project() -> tuple[
 def test_project_save_and_load_round_trip(tmp_path):
     """Persist project objects and reset path and modified state on load."""
     project, air, fibre, layup, solver = make_project()
-    path = tmp_path / "project.json"
+    path = tmp_path / "project.pyvagui"
 
     project.save(path)
     loaded = Project.load(path)

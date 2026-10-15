@@ -150,7 +150,9 @@ path and the selected filter; an empty path means the user cancelled.
 The project window uses it for opening and saving JSON files.
 
 ```python
-path, _ = QFileDialog.getOpenFileName(self, "Open project", "", "*.json")
+path, _ = QFileDialog.getOpenFileName(
+  self, "Open project", "", "pyvaGUI project (*.pyvagui)"
+)
 if path:
  self._load_project(Path(path))
 ```

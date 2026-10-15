@@ -9,12 +9,12 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QWidget,
 )
 
 from pyvagui.gui.material_editor import parse_float
+from pyvagui.gui.tree_icons import ACTION_ICONS
 from pyvagui.model.layup import PerforationSpec
 
 
@@ -76,6 +76,9 @@ class PerforationDialog(QDialog):
 
         # QFormLayout places one descriptive label beside each input field.
         layout = QFormLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setHorizontalSpacing(16)
+        layout.setVerticalSpacing(10)
         radius_mm = 1.0
         distance_mm = 20.0
         if self.perforation is not None:
@@ -87,12 +90,18 @@ class PerforationDialog(QDialog):
         layout.addRow("Hole distance [mm]", self.distance_edit)
 
         self.error_label = QLabel(self)
+        self.error_label.setObjectName("errorBanner")
         self.error_label.setWordWrap(True)
         self.error_label.hide()
         layout.addRow(self.error_label)
 
         buttons = QHBoxLayout()
-        self.remove_button = QPushButton("Remove perforation", self)
+        self.remove_button = QPushButton(self)
+        self.remove_button.setIcon(ACTION_ICONS["trash"])
+        self.remove_button.setObjectName("dangerButton")
+        self.remove_button.setToolTip("Remove perforation")
+        self.remove_button.setAccessibleName("Remove perforation")
+        self.remove_button.setFixedSize(38, 38)
         self.remove_button.setVisible(self.perforation is not None)
         self.remove_button.clicked.connect(self.remove_perforation)
         buttons.addWidget(self.remove_button)
@@ -104,6 +113,9 @@ class PerforationDialog(QDialog):
             parent=self,
         )
         self.button_box.accepted.connect(self.save_perforation)
+        self.button_box.button(
+            QDialogButtonBox.StandardButton.Save
+        ).setObjectName("primaryButton")
         self.button_box.rejected.connect(self.reject)
         buttons.addWidget(self.button_box)
         layout.addRow(buttons)
@@ -147,4 +159,3 @@ class PerforationDialog(QDialog):
         """
         self.error_label.setText("\n".join(errors))
         self.error_label.show()
-        QMessageBox.warning(self, "Invalid perforation", "\n".join(errors))

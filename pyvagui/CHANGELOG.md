@@ -2,6 +2,10 @@
 
 ## 0.1.0 - unreleased
 
+- Save and open projects as `.pyvagui` files while preserving the versioned JSON content
+- Modernized desktop styling with visible splitter handles, compact project navigation, and a resizable application log
+- Grouped library materials by category and sorted their names; linked frame materials are copied automatically
+- Replaced routine add, save-to-library, and result-export popups with inline feedback; retained data-loss safeguards
 - Project setup: folder structure, pyproject.toml, flake8, pytest
 - Material specs: Fluid, EquivalentFluid, Delany-Bazley, IsoMat, and PoroElasticMat
 - Phase 1: inspected pyva-toolbox 1.3.1 and documented its API

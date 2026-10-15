@@ -4,12 +4,56 @@ import pytest
 from PyQt6.QtWidgets import QComboBox, QDialog, QMessageBox
 
 from pyvagui.gui.material_editor import MaterialEditorDialog
+from pyvagui.model.library import MaterialLibrary
 from pyvagui.model.materials import (
     FluidSpec,
     IsoMatSpec,
     PoroElasticMatSpec,
 )
 from pyvagui.model.project import Project
+
+
+def test_save_to_library_reports_success_inline(qtbot, tmp_path, monkeypatch):
+    """Persist a library copy without interrupting material editing."""
+    library = MaterialLibrary(tmp_path / "library.json")
+    dialog = MaterialEditorDialog(Project(), FluidSpec(name="Air"), library)
+    qtbot.addWidget(dialog)
+    messages = []
+    monkeypatch.setattr(
+        QMessageBox, "information", lambda *args: messages.append(args)
+    )
+
+    dialog.save_to_library()
+
+    assert library.path.exists()
+    assert len(library.materials) == 1
+    assert not messages
+    assert dialog.library_status_label.text() == "Saved 'Air' to the library."
+
+
+def test_library_pick_syncs_type_selector_and_keeps_values(
+    qtbot, tmp_path, monkeypatch
+):
+    """Show the picked material's type without resetting its values."""
+    picked = IsoMatSpec(name="Steel", E=2.1e11)
+    library = MaterialLibrary(tmp_path / "library.json")
+    dialog = MaterialEditorDialog(Project(), library=library)
+    qtbot.addWidget(dialog)
+
+    def pick(library_dialog):
+        library_dialog.selected_materials = [picked]
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(
+        "pyvagui.gui.material_editor.LibraryDialog.exec", pick
+    )
+
+    dialog.add_from_library()
+
+    assert dialog.type_combo.currentText() == "Isomat"
+    assert dialog.properties_group.title() == "Isomat properties"
+    assert dialog.material_spec is picked
+    assert dialog.field_widgets["E"].text() == "210000000000.0"
 
 
 def test_new_material_dialog_creates_valid_fluid(qtbot):
@@ -49,12 +93,14 @@ def test_invalid_input_shows_all_errors_and_keeps_dialog_open(
 
     dialog.save_material()
 
+    banner = dialog.error_label.text()
     assert dialog.isVisible()
     assert dialog.result() == QDialog.DialogCode.Rejected
-    assert len(messages) == 1
-    assert "c0: enter a valid finite number" in messages[0]
-    assert "Material name must not be empty" in messages[0]
-    assert "density must be > 0" in messages[0]
+    assert not messages
+    assert dialog.error_label.isVisible()
+    assert "c0: enter a valid finite number" in banner
+    assert "Material name must not be empty" in banner
+    assert "density must be > 0" in banner
 
 
 def test_edit_dialog_uses_copy_and_disables_material_type(qtbot):
@@ -115,10 +161,12 @@ def test_new_material_type_switch_builds_type_specific_fields(qtbot):
     """Rebuild fields from the selected dataclass when creating a material."""
     dialog = MaterialEditorDialog(Project())
     qtbot.addWidget(dialog)
-    equivalent_index = dialog.type_combo.findText("EquivalentFluid")
+    equivalent_index = dialog.type_combo.findText("Equivalent fluid")
 
     dialog.type_combo.setCurrentIndex(equivalent_index)
 
+    assert dialog.properties_group.title() == "Equivalent fluid properties"
+    assert dialog.properties_layout.rowCount() == len(dialog.field_widgets)
     assert "flow_res" in dialog.field_widgets
     assert "limp" in dialog.field_widgets
     assert "Pr" not in dialog.field_widgets

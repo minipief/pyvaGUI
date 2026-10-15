@@ -2,24 +2,29 @@
 
 import copy
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from pyvagui.gui.library_dialog import MATERIAL_GROUPS
 from pyvagui.gui.material_editor import parse_float
 from pyvagui.gui.layup_preview import LayupPreview
 from pyvagui.gui.perforation_dialog import (
@@ -27,6 +32,7 @@ from pyvagui.gui.perforation_dialog import (
     m_to_mm,
     mm_to_m,
 )
+from pyvagui.gui.tree_icons import ACTION_ICONS, TREE_ICONS
 from pyvagui.model.layup import LayerSpec, LayerType, Layup, PerforationSpec
 from pyvagui.model.materials import MaterialSpec
 from pyvagui.model.project import Project
@@ -58,14 +64,22 @@ class LayerTableWidget(QTableWidget):
         self.move_callback = move_callback
         self.setHorizontalHeaderLabels(
             [
-                "Move",
+                "",
                 "Material",
                 "Thickness [mm]",
                 "Layer type",
                 "Perforation",
-                "Delete",
+                "",
             ]
         )
+        self.verticalHeader().setDefaultSectionSize(44)
+        self.verticalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Fixed
+        )
+        self.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.setShowGrid(False)
         self.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -126,9 +140,14 @@ class LayupEditorDialog(QDialog):
         """Create the layer table, preview, and dialog actions."""
         # Layouts keep controls together as the window resizes.
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Name", self))
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        self.resize(1500, 600)
+        name_form = QFormLayout()
         self.name_edit = QLineEdit(self.layup.name, self)
-        layout.addWidget(self.name_edit)
+        self.name_edit.setPlaceholderText("Layup name")
+        name_form.addRow("Name", self.name_edit)
+        layout.addLayout(name_form)
 
         # The splitter keeps the editable table and stack preview side by side.
         content_splitter = QSplitter(Qt.Orientation.Horizontal, self)
@@ -138,6 +157,7 @@ class LayupEditorDialog(QDialog):
         layer_layout = QVBoxLayout(layer_panel)
         layer_layout.setContentsMargins(0, 0, 8, 0)
         self.summary_label = QLabel(layer_panel)
+        self.summary_label.setObjectName("mutedLabel")
         layer_layout.addWidget(self.summary_label)
 
         # The table's embedded controls are rebuilt from the Layup model.
@@ -145,12 +165,11 @@ class LayupEditorDialog(QDialog):
             self._move_layer_by_drop,
             layer_panel,
         )
-        self.layer_table.setColumnWidth(0, 48)
-        self.layer_table.setColumnWidth(1, 190)
+        self.layer_table.setColumnWidth(0, 36)
         self.layer_table.setColumnWidth(2, 120)
         self.layer_table.setColumnWidth(3, 130)
-        self.layer_table.setColumnWidth(4, 180)
-        self.layer_table.setColumnWidth(5, 70)
+        self.layer_table.setColumnWidth(4, 190)
+        self.layer_table.setColumnWidth(5, 90)
         layer_layout.addWidget(self.layer_table, stretch=1)
 
         self.preview = LayupPreview(
@@ -162,12 +181,23 @@ class LayupEditorDialog(QDialog):
         content_splitter.addWidget(self.preview)
         content_splitter.setStretchFactor(0, 3)
         content_splitter.setStretchFactor(1, 2)
+        content_splitter.setHandleWidth(7)
+        content_splitter.setChildrenCollapsible(False)
         layout.addWidget(content_splitter, stretch=1)
 
         controls = QHBoxLayout()
-        self.add_layer_button = QPushButton("+ Add layer", self)
-        self.move_up_button = QPushButton("Move up", self)
-        self.move_down_button = QPushButton("Move down", self)
+        self.add_layer_button = QPushButton("Add layer", self)
+        self.add_layer_button.setIcon(ACTION_ICONS["plus"])
+        self.move_up_button = QPushButton(self)
+        self.move_up_button.setIcon(ACTION_ICONS["up"])
+        self.move_up_button.setToolTip("Move layer up")
+        self.move_up_button.setAccessibleName("Move layer up")
+        self.move_up_button.setFixedSize(38, 38)
+        self.move_down_button = QPushButton(self)
+        self.move_down_button.setIcon(ACTION_ICONS["down"])
+        self.move_down_button.setToolTip("Move layer down")
+        self.move_down_button.setAccessibleName("Move layer down")
+        self.move_down_button.setFixedSize(38, 38)
         self.add_layer_button.clicked.connect(self.add_layer)
         self.move_up_button.clicked.connect(lambda: self.move_selected(-1))
         self.move_down_button.clicked.connect(lambda: self.move_selected(1))
@@ -177,12 +207,21 @@ class LayupEditorDialog(QDialog):
         controls.addWidget(self.move_down_button)
         layout.addLayout(controls)
 
+        self.error_label = QLabel(self)
+        self.error_label.setObjectName("errorBanner")
+        self.error_label.setWordWrap(True)
+        self.error_label.hide()
+        layout.addWidget(self.error_label)
+
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Cancel
             | QDialogButtonBox.StandardButton.Save,
             parent=self,
         )
         self.button_box.accepted.connect(self.save_layup)
+        self.button_box.button(
+            QDialogButtonBox.StandardButton.Save
+        ).setObjectName("primaryButton")
         self.button_box.rejected.connect(self.reject)
         layout.addWidget(self.button_box)
 
@@ -194,6 +233,12 @@ class LayupEditorDialog(QDialog):
             self.layer_table.insertRow(row)
             self._build_row(row, layer)
         self._update_summary()
+        has_materials = bool(self.project.materials)
+        self.add_layer_button.setEnabled(has_materials)
+        self.add_layer_button.setToolTip(
+            "" if has_materials
+            else "Add a material to the project before adding a layer."
+        )
         self.preview.set_data(
             self.layup,
             self.project.materials_by_id(),
@@ -209,29 +254,53 @@ class LayupEditorDialog(QDialog):
         layer : LayerSpec
             Layer model object represented by the row.
         """
-        handle = QTableWidgetItem("Move")
+        handle = QTableWidgetItem("\u2261")
+        handle.setToolTip("Drag to reorder")
+        handle.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         handle.setFlags(handle.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.layer_table.setItem(row, 0, handle)
 
-        material_combo = QComboBox(self.layer_table)
         materials = self.project.materials_by_id()
-        for material in self.project.materials:
-            layer_types = LayerSpec.allowed_types(material)
-            if layer_types:
-                material_combo.addItem(
-                    f"{material.name} ({self._material_type(material)})",
-                    material.id,
-                )
-        material_index = material_combo.findData(layer.material_id)
-        if material_index >= 0:
-            material_combo.setCurrentIndex(material_index)
-        material_combo.currentIndexChanged.connect(
-            lambda index, layer_row=row: self._material_changed(
-                layer_row,
-                index,
-            )
+        material_button = QToolButton(self.layer_table)
+        material_button.setPopupMode(
+            QToolButton.ToolButtonPopupMode.InstantPopup
         )
-        self.layer_table.setCellWidget(row, 1, material_combo)
+        material_menu = QMenu(material_button)
+        for category, material_type in MATERIAL_GROUPS:
+            category_materials = sorted(
+                (
+                    material
+                    for material in self.project.materials
+                    if isinstance(material, material_type)
+                    and LayerSpec.allowed_types(material)
+                ),
+                key=lambda material: material.name.casefold(),
+            )
+            if not category_materials:
+                continue
+            submenu = material_menu.addMenu(category)
+            for project_material in category_materials:
+                action = submenu.addAction(project_material.name)
+                action.setData(project_material.id)
+                action.triggered.connect(
+                    lambda checked=False, layer_row=row,
+                    material_id=project_material.id: QTimer.singleShot(
+                        0,
+                        lambda: self._material_changed(
+                            layer_row, material_id
+                        ),
+                    )
+                )
+        material_button.setMenu(material_menu)
+        material_button.setIcon(TREE_ICONS["material"])
+        selected_material = materials.get(layer.material_id)
+        material_button.setText(
+            "Select material"
+            if selected_material is None
+            else selected_material.name
+        )
+        material_button.setEnabled(bool(material_menu.actions()))
+        self.layer_table.setCellWidget(row, 1, material_button)
 
         thickness_edit = QLineEdit(f"{m_to_mm(layer.thickness):g}")
         thickness_edit.editingFinished.connect(
@@ -275,26 +344,30 @@ class LayupEditorDialog(QDialog):
         )
         self.layer_table.setCellWidget(row, 4, perforation_button)
 
-        delete_button = QPushButton("Delete", self.layer_table)
+        delete_button = QPushButton(self.layer_table)
+        delete_button.setIcon(ACTION_ICONS["trash"])
+        delete_button.setObjectName("dangerButton")
+        delete_button.setToolTip("Delete layer")
+        delete_button.setAccessibleName("Delete layer")
+        delete_button.setFixedSize(38, 38)
         delete_button.clicked.connect(
             lambda checked=False, layer_row=row: self.remove_layer(layer_row)
         )
         self.layer_table.setCellWidget(row, 5, delete_button)
 
-    def _material_changed(self, row: int, index: int) -> None:
+    def _material_changed(self, row: int, material_id: str) -> None:
         """Update material and reset type/perforation after selection.
 
         Parameters
         ----------
         row : int
             Layer row being changed.
-        index : int
-            Selected material combo index.
+        material_id : str
+            Identifier of the selected material.
         """
-        if index < 0 or row >= len(self.layup.layers):
+        if row >= len(self.layup.layers):
             return
-        combo = self.layer_table.cellWidget(row, 1)
-        material = self.project.find_material_by_id(combo.currentData())
+        material = self.project.find_material_by_id(material_id)
         if material is None:
             return
         allowed_types = LayerSpec.allowed_types(material)
@@ -366,11 +439,6 @@ class LayupEditorDialog(QDialog):
     def add_layer(self) -> None:
         """Append a default 10 mm layer using the first project material."""
         if not self.project.materials:
-            QMessageBox.information(
-                self,
-                "Add layer",
-                "Add a material to the project before adding a layer.",
-            )
             return
         material = self.project.materials[0]
         layer_types = LayerSpec.allowed_types(material)
@@ -468,7 +536,8 @@ class LayupEditorDialog(QDialog):
         if not self.layup.name:
             errors.append("Layup name must not be empty.")
         if errors:
-            QMessageBox.warning(self, "Invalid layup", "\n".join(errors))
+            self.error_label.setText("\n".join(errors))
+            self.error_label.show()
             return
         self.result_layup = self.layup
         self.accept()
@@ -512,6 +581,13 @@ class LayupEditorDialog(QDialog):
         Returns
         -------
         str
-            Class name without its ``Spec`` suffix.
+            Category label used in the project tree.
         """
-        return type(material).__name__.removesuffix("Spec")
+        return next(
+            (
+                label
+                for label, material_type in MATERIAL_GROUPS
+                if isinstance(material, material_type)
+            ),
+            type(material).__name__.removesuffix("Spec"),
+        )

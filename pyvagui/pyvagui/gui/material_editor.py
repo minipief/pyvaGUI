@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QGridLayout,
+    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -20,25 +20,19 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from pyvagui.gui.library_dialog import LibraryDialog, MATERIAL_GROUPS
+from pyvagui.gui.tree_icons import ACTION_ICONS
 from pyvagui.model.library import MaterialLibrary
 from pyvagui.model.materials import (
-    DelanyBazleySpec,
-    EquivalentFluidSpec,
-    FluidSpec,
     IsoMatSpec,
     MaterialSpec,
     PoroElasticMatSpec,
+    FluidSpec,
 )
 from pyvagui.model.project import Project
 
 
-MATERIAL_TYPES = (
-    ("Fluid", FluidSpec),
-    ("EquivalentFluid", EquivalentFluidSpec),
-    ("Delany-Bazley", DelanyBazleySpec),
-    ("Isomat", IsoMatSpec),
-    ("PoroElasticMat", PoroElasticMatSpec),
-)
+MATERIAL_TYPES = MATERIAL_GROUPS
 
 FIELD_INFO = {
     "c0": ("Speed of sound", "m/s"),
@@ -58,15 +52,7 @@ FIELD_INFO = {
     "miki": ("Miki model", ""),
     "E": ("Young's modulus", "Pa"),
     "nu": ("Poisson ratio", "-"),
-    "solid_mat_id": ("Frame material", "Isomat"),
-}
-
-TYPE_GROUP_NAMES = {
-    FluidSpec: "Fluid properties",
-    EquivalentFluidSpec: "EquivalentFluid properties",
-    DelanyBazleySpec: "Delany-Bazley properties",
-    IsoMatSpec: "Isomat properties",
-    PoroElasticMatSpec: "PoroElasticMat properties",
+    "solid_mat_id": ("Frame material", ""),
 }
 
 
@@ -138,28 +124,54 @@ class MaterialEditorDialog(QDialog):
         """Create the name, type, property, and action controls."""
         # A form dialog keeps labels and input widgets together as one unit.
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        self.setMinimumWidth(480)
+        header_form = QFormLayout()
+        header_form.setHorizontalSpacing(16)
         self.name_edit = QLineEdit(self.material_spec.name, self)
-        layout.addWidget(QLabel("Name", self))
-        layout.addWidget(self.name_edit)
+        self.name_edit.setPlaceholderText("Material name")
+        header_form.addRow("Name", self.name_edit)
 
         self.type_combo = QComboBox(self)
-        layout.addWidget(QLabel("Material type", self))
-        layout.addWidget(self.type_combo)
+        header_form.addRow("Material type", self.type_combo)
         self.type_combo.setEnabled(self.is_new)
+        layout.addLayout(header_form)
 
         self.properties_group = QGroupBox(self)
-        self.properties_layout = QGridLayout(self.properties_group)
+        self.properties_layout = QFormLayout(self.properties_group)
+        self.properties_layout.setHorizontalSpacing(16)
+        self.properties_layout.setVerticalSpacing(8)
+        self.properties_layout.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+        )
         layout.addWidget(self.properties_group)
+
+        self.error_label = QLabel(self)
+        self.error_label.setObjectName("errorBanner")
+        self.error_label.setWordWrap(True)
+        self.error_label.hide()
+        layout.addWidget(self.error_label)
+
+        self.library_status_label = QLabel(self)
+        self.library_status_label.setObjectName("successBanner")
+        self.library_status_label.setWordWrap(True)
+        self.library_status_label.hide()
+        layout.addWidget(self.library_status_label)
 
         button_row = QHBoxLayout()
         self.add_from_library_button = QPushButton(
             "Add from library...", self
         )
-        self.add_from_library_button.setVisible(self.is_new)
+        self.add_from_library_button.setIcon(ACTION_ICONS["open"])
+        self.add_from_library_button.setVisible(
+            self.is_new and self.library is not None
+        )
         self.add_from_library_button.clicked.connect(self.add_from_library)
         button_row.addWidget(self.add_from_library_button)
 
         self.save_to_library_button = QPushButton("Save to library", self)
+        self.save_to_library_button.setIcon(ACTION_ICONS["save"])
         self.save_to_library_button.setVisible(
             not self.is_new and self.library is not None
         )
@@ -173,6 +185,9 @@ class MaterialEditorDialog(QDialog):
             parent=self,
         )
         self.button_box.accepted.connect(self.save_material)
+        self.button_box.button(
+            QDialogButtonBox.StandardButton.Save
+        ).setObjectName("primaryButton")
         self.button_box.rejected.connect(self.reject)
         button_row.addWidget(self.button_box)
         layout.addLayout(button_row)
@@ -204,44 +219,40 @@ class MaterialEditorDialog(QDialog):
         self._rebuild_property_fields()
 
     def _rebuild_property_fields(self) -> None:
-        """Build one widget for every editable dataclass field."""
-        while self.properties_layout.count():
-            item = self.properties_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
+        """Build one form row for every editable dataclass field."""
+        # removeRow deletes widgets immediately, so old rows cannot linger.
+        while self.properties_layout.rowCount():
+            self.properties_layout.removeRow(0)
         self.field_widgets.clear()
-        self.properties_group.setTitle(
-            TYPE_GROUP_NAMES[type(self.material_spec)]
+        self.error_label.hide()
+        type_label = next(
+            label
+            for label, material_type in MATERIAL_TYPES
+            if type(self.material_spec) is material_type
         )
+        self.properties_group.setTitle(f"{type_label} properties")
 
         editable_fields = [
             item
             for item in fields(self.material_spec)
             if item.name not in ("name", "id")
         ]
-        for field_index, material_field in enumerate(editable_fields):
-            row = field_index // 2
-            column = (field_index % 2) * 2
+        for material_field in editable_fields:
             label_text, unit = FIELD_INFO.get(
                 material_field.name,
                 (material_field.name, ""),
             )
-            if unit:
+            if unit and unit != "-":
                 label_text = f"{label_text} [{unit}]"
-            label = QLabel(label_text, self.properties_group)
-            label.setToolTip(material_field.name)
             widget = self._create_field_widget(material_field)
             widget.setToolTip(material_field.name)
-            self.properties_layout.addWidget(label, row * 2, column)
-            self.properties_layout.addWidget(
-                widget,
-                row * 2 + 1,
-                column,
-                1,
-                2 if material_field.name == "solid_mat_id" else 1,
-            )
+            if isinstance(widget, QCheckBox):
+                widget.setText(label_text)
+                self.properties_layout.addRow("", widget)
+            else:
+                self.properties_layout.addRow(label_text, widget)
             self.field_widgets[material_field.name] = widget
+        self.adjustSize()
 
     def _create_field_widget(self, material_field) -> QWidget:
         """Create a checkbox, frame selector, or text input for a field.
@@ -263,7 +274,7 @@ class MaterialEditorDialog(QDialog):
             return checkbox
         if material_field.name == "solid_mat_id":
             combo = QComboBox(self.properties_group)
-            combo.addItem("Select Isomat", "")
+            combo.addItem("Select Isomat frame", "")
             available_materials = (
                 self.project.materials + self.additional_materials
             )
@@ -332,14 +343,22 @@ class MaterialEditorDialog(QDialog):
         """Validate all values and accept only when no errors remain."""
         errors = self._validation_errors()
         if errors:
-            QMessageBox.warning(
-                self,
-                "Invalid material",
-                "\n".join(errors),
-            )
+            self._show_errors(errors)
             return
         self.material = self.material_spec
         self.accept()
+
+    def _show_errors(self, errors: list[str]) -> None:
+        """Show validation errors inline and keep the dialog open.
+
+        Parameters
+        ----------
+        errors : list of str
+            Messages explaining why the material cannot be saved.
+        """
+        self.library_status_label.hide()
+        self.error_label.setText("\n".join(errors))
+        self.error_label.show()
 
     def add_from_library(self) -> None:
         """Select a library material as the new dialog's working copy."""
@@ -350,9 +369,6 @@ class MaterialEditorDialog(QDialog):
                 "No material library is available.",
             )
             return
-        # The selection-only dialog returns copies and does not change Project.
-        from pyvagui.gui.library_dialog import LibraryDialog
-
         dialog = LibraryDialog(
             self.project,
             self.library,
@@ -364,6 +380,12 @@ class MaterialEditorDialog(QDialog):
                 self.material_spec = dialog.selected_materials[0]
                 self.additional_materials = dialog.additional_materials
                 self.name_edit.setText(self.material_spec.name)
+                # Blocked so the type change keeps the selected values.
+                self.type_combo.blockSignals(True)
+                self.type_combo.setCurrentIndex(
+                    self.type_combo.findData(type(self.material_spec))
+                )
+                self.type_combo.blockSignals(False)
                 self._rebuild_property_fields()
 
     def save_to_library(self) -> None:
@@ -372,11 +394,7 @@ class MaterialEditorDialog(QDialog):
             return
         errors = self._validation_errors()
         if errors:
-            QMessageBox.warning(
-                self,
-                "Invalid material",
-                "\n".join(errors),
-            )
+            self._show_errors(errors)
             return
         library_copy = self.material_spec.copy_with_new_id()
         try:
@@ -385,8 +403,8 @@ class MaterialEditorDialog(QDialog):
         except (OSError, ValueError) as error:
             QMessageBox.critical(self, "Material library", str(error))
             return
-        QMessageBox.information(
-            self,
-            "Material library",
-            f"Saved '{self.material_spec.name}' to the library.",
+        self.error_label.hide()
+        self.library_status_label.setText(
+            f"Saved '{self.material_spec.name}' to the library."
         )
+        self.library_status_label.show()

@@ -15,9 +15,6 @@ absorption, transmission, and surface impedance with
     magnitude, phase, real, and imaginary views.
 - CSV result export and PNG/SVG figure export.
 
-For the architecture and complete user workflow, see
-[`docs/development/overview.md`](docs/development/overview.md).
-
 ## Installation (development)
 
 ```powershell
@@ -43,9 +40,9 @@ python -m pyvagui
      appear in the status bar and application log.
 5. Use **Export...** on the result tab to save CSV data or a PNG/SVG plot.
 
-Projects are saved as versioned JSON. Materials in the user library are
-stored separately. Calculated result arrays are transient and are not
-written into project files.
+Projects are saved as `.pyvagui` files. Materials in
+the user library are stored separately. Calculated result arrays are transient
+and are not written into project files.
 
 Most model lengths use SI meters. The layup and perforation dialogs show
 lengths in millimeters and convert them to meters when saving.

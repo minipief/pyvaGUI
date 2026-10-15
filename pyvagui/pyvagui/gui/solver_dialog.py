@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QVBoxLayout,
     QWidget,
 )
@@ -75,6 +74,9 @@ class SolverEditorDialog(QDialog):
         """Create solver, fluid, angle, frequency, and layup controls."""
         # Form layouts keep each setting beside its descriptive label.
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        self.setMinimumWidth(460)
         name_form = QFormLayout()
         self.name_edit = QLineEdit(self.solver_spec.name, self)
         name_form.addRow("Name", self.name_edit)
@@ -108,6 +110,8 @@ class SolverEditorDialog(QDialog):
             "Maximum incidence angle for diffuse averaging.",
             self.incidence_group,
         )
+        self.diffuse_hint.setObjectName("mutedLabel")
+        self.diffuse_hint.setWordWrap(True)
         incidence_form.addRow(self.single_angle_label, self.single_angle_edit)
         incidence_form.addRow(
             self.maximum_angle_label,
@@ -152,6 +156,7 @@ class SolverEditorDialog(QDialog):
         layout.addWidget(layups_group, stretch=1)
 
         self.error_label = QLabel(self)
+        self.error_label.setObjectName("errorBanner")
         self.error_label.setWordWrap(True)
         self.error_label.hide()
         layout.addWidget(self.error_label)
@@ -162,6 +167,9 @@ class SolverEditorDialog(QDialog):
             parent=self,
         )
         self.button_box.accepted.connect(self.save_solver)
+        self.button_box.button(
+            QDialogButtonBox.StandardButton.Save
+        ).setObjectName("primaryButton")
         self.button_box.rejected.connect(self.reject)
         layout.addWidget(self.button_box)
 
@@ -298,7 +306,6 @@ class SolverEditorDialog(QDialog):
         if errors:
             self.error_label.setText("\n".join(errors))
             self.error_label.show()
-            QMessageBox.warning(self, "Invalid solver", "\n".join(errors))
             return
         self.result_solver = solver
         self.accept()

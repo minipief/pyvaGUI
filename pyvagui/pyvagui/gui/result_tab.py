@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from pyvagui.gui.tree_icons import ACTION_ICONS
 from pyvagui.model.results import ResultSet
 from pyvagui.model.solvers import SolverSpec, SolverType
 from pyvagui.services.export import export_csv, export_image
@@ -55,15 +56,28 @@ class ResultTab(QWidget):
         self.solver = solver
         self.run_callback = run_callback
         self.result_set: ResultSet | None = None
-        self.figure = Figure(figsize=(6, 4), tight_layout=True)
+        self.figure = Figure(
+            figsize=(6, 4), tight_layout=True, facecolor="#ffffff"
+        )
         self.canvas = FigureCanvasQTAgg(self.figure)
         self.axes = []
+        self._data_lines = {}
+        self._hover_artists = {}
+        self.canvas.mpl_connect(
+            "motion_notify_event",
+            self._on_plot_hover,
+        )
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
         header = QHBoxLayout()
         self.title_label = QLabel(f"{solver.name} Results", self)
+        self.title_label.setObjectName("titleLabel")
         self.run_button = QPushButton("Run", self)
+        self.run_button.setObjectName("primaryButton")
+        self.run_button.setIcon(ACTION_ICONS["play-white"])
         self.export_button = QPushButton("Export...", self)
+        self.export_button.setIcon(ACTION_ICONS["export"])
         self.export_button.setEnabled(False)
         self.run_button.clicked.connect(self.run_callback)
         self.export_button.clicked.connect(self.export_results)
@@ -87,11 +101,18 @@ class ResultTab(QWidget):
         layout.addWidget(self.complex_view_panel)
 
         self.hint_label = QLabel("Press Run to calculate", self)
+        self.hint_label.setObjectName("emptyState")
         self.hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.result_placeholder = self.hint_label
         layout.addWidget(self.hint_label, stretch=1)
         self.canvas.hide()
         layout.addWidget(self.canvas, stretch=1)
+
+        self.export_status_label = QLabel(self)
+        self.export_status_label.setObjectName("successBanner")
+        self.export_status_label.setWordWrap(True)
+        self.export_status_label.hide()
+        layout.addWidget(self.export_status_label)
 
     def set_results(self, result_set: ResultSet) -> None:
         """Set results for this tab and redraw the chart.
@@ -118,6 +139,8 @@ class ResultTab(QWidget):
         views = self._selected_views()
         self.figure.clear()
         self.axes = []
+        self._data_lines = {}
+        self._hover_artists = {}
         if not views:
             self.figure.text(
                 0.5,
@@ -137,22 +160,129 @@ class ResultTab(QWidget):
         self.axes = [axes_grid[index][0] for index in range(len(views))]
         frequencies = self.result_set.frequencies
         for axis, view in zip(self.axes, views):
+            self._data_lines[axis] = []
             for layup_result in self.result_set.results:
                 values = self._values_for_view(layup_result.values, view)
-                axis.plot(
+                line, = axis.plot(
                     frequencies,
                     values,
                     label=layup_result.layup_name,
                 )
+                line.set_pickradius(8)
+                self._data_lines[axis].append(line)
             axis.set_xscale("log")
             axis.set_xlabel("Frequency [Hz]")
             axis.set_ylabel(self._y_axis_label())
             axis.grid(True, which="both", alpha=0.25)
             axis.legend()
+            annotation = axis.annotate(
+                "",
+                xy=(0, 0),
+                xytext=(12, 12),
+                textcoords="offset points",
+                bbox={
+                    "boxstyle": "round,pad=0.45",
+                    "fc": "#ffffff",
+                    "ec": "#c3ccd4",
+                    "alpha": 0.97,
+                },
+                arrowprops={"arrowstyle": "->", "color": "#66737e"},
+                fontsize=9,
+                zorder=20,
+            )
+            annotation.set_visible(False)
+            marker = axis.scatter(
+                [],
+                [],
+                s=34,
+                color="#167d70",
+                edgecolors="#ffffff",
+                linewidths=1.2,
+                zorder=19,
+            )
+            self._hover_artists[axis] = (annotation, marker)
             if self.solver.is_complex():
                 axis.set_title(dict(COMPLEX_VIEWS)[view])
         self.figure.tight_layout()
         self.canvas.draw()
+
+    def _on_plot_hover(self, event) -> None:
+        """Show the nearest curve's value while the pointer is over it."""
+        if event.inaxes not in self._hover_artists:
+            self._hide_plot_hover()
+            return
+
+        closest = None
+        for line in self._data_lines.get(event.inaxes, []):
+            contains, details = line.contains(event)
+            if not contains:
+                continue
+            indices = np.asarray(details.get("ind", []), dtype=int)
+            if indices.size == 0:
+                continue
+            x_values = np.asarray(line.get_xdata(), dtype=float)[indices]
+            y_values = np.asarray(line.get_ydata(), dtype=float)[indices]
+            display_points = event.inaxes.transData.transform(
+                np.column_stack((x_values, y_values))
+            )
+            distances = np.hypot(
+                display_points[:, 0] - event.x,
+                display_points[:, 1] - event.y,
+            )
+            nearest_index = int(np.argmin(distances))
+            candidate = (
+                distances[nearest_index],
+                line,
+                x_values[nearest_index],
+                y_values[nearest_index],
+            )
+            if closest is None or candidate[0] < closest[0]:
+                closest = candidate
+
+        self._hide_plot_hover()
+        if closest is None:
+            return
+
+        _, line, frequency, value = closest
+        annotation, marker = self._hover_artists[event.inaxes]
+        annotation.xy = (frequency, value)
+        annotation.set_text(
+            f"{line.get_label()}\n{frequency:g} Hz\nValue: {value:.6g}"
+        )
+        annotation.set_visible(True)
+        annotation.set_position((12, 12))
+        renderer = self.canvas.get_renderer()
+        preview_bounds = annotation.get_window_extent(renderer)
+        horizontal_offset = (
+            -12
+            if event.inaxes.bbox.x1 - event.x < preview_bounds.width + 12
+            else 12
+        )
+        vertical_offset = (
+            -12
+            if event.inaxes.bbox.y1 - event.y < preview_bounds.height + 12
+            else 12
+        )
+        annotation.set_position((horizontal_offset, vertical_offset))
+        annotation.set_horizontalalignment(
+            "right" if horizontal_offset < 0 else "left"
+        )
+        annotation.set_verticalalignment(
+            "top" if vertical_offset < 0 else "bottom"
+        )
+        marker.set_offsets([[frequency, value]])
+        self.canvas.draw_idle()
+
+    def _hide_plot_hover(self) -> None:
+        """Hide hover previews when the pointer leaves a plotted line."""
+        changed = False
+        for annotation, marker in self._hover_artists.values():
+            if annotation.get_visible():
+                annotation.set_visible(False)
+                marker.set_offsets(np.empty((0, 2)))
+                changed = True
+        if changed:
+            self.canvas.draw_idle()
 
     def export_results(self) -> None:
         """Export current data as CSV or the figure as PNG/SVG."""
@@ -186,11 +316,8 @@ class ResultTab(QWidget):
         except (OSError, ValueError) as error:
             QMessageBox.critical(self, "Export results", str(error))
             return
-        QMessageBox.information(
-            self,
-            "Export results",
-            f"Exported results to '{target}'.",
-        )
+        self.export_status_label.setText(f"Exported results to '{target}'.")
+        self.export_status_label.show()
 
     def _selected_views(self) -> list[str]:
         """Return visible complex views or the single real result view."""

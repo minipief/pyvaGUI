@@ -1,7 +1,7 @@
 """Tests for layup layer editing and row reordering."""
 
-from PyQt6.QtCore import QPointF
-from PyQt6.QtWidgets import QComboBox, QDialog, QMessageBox
+from PyQt6.QtCore import QCoreApplication, QPointF
+from PyQt6.QtWidgets import QComboBox, QDialog, QMessageBox, QToolButton
 
 from pyvagui.gui.layup_editor import LayupEditorDialog
 from pyvagui.model.layup import LayerSpec, LayerType, Layup, PerforationSpec
@@ -14,6 +14,20 @@ def make_project():
     air = FluidSpec(name="Air")
     aluminium = IsoMatSpec(name="Aluminium")
     return Project(materials=[air, aluminium]), air, aluminium
+
+
+def select_material(button, material_id):
+    """Trigger the menu action matching a project material identifier."""
+    for category_action in button.menu().actions():
+        submenu = category_action.menu()
+        if submenu is None:
+            continue
+        for material_action in submenu.actions():
+            if material_action.data() == material_id:
+                material_action.trigger()
+                QCoreApplication.processEvents()
+                return
+    raise AssertionError(f"No material action found for {material_id}")
 
 
 def test_add_move_and_delete_layer_rows(qtbot):
@@ -101,8 +115,12 @@ def test_invalid_layup_shows_errors_and_remains_open(qtbot, monkeypatch):
     dialog.save_layup()
 
     assert dialog.isVisible()
-    assert len(messages) == 1
-    assert "Layer 1: thickness must be a finite number" in messages[0]
+    assert not messages
+    assert dialog.error_label.isVisible()
+    assert (
+        "Layer 1: thickness must be a finite number"
+        in dialog.error_label.text()
+    )
 
 
 def test_changing_material_resets_layer_type_and_perforation(qtbot):
@@ -123,9 +141,10 @@ def test_changing_material_resets_layer_type_and_perforation(qtbot):
     )
     dialog = LayupEditorDialog(project, layup)
     qtbot.addWidget(dialog)
-    material_combo = dialog.layer_table.cellWidget(0, 1)
+    material_button = dialog.layer_table.cellWidget(0, 1)
+    assert isinstance(material_button, QToolButton)
 
-    material_combo.setCurrentIndex(material_combo.findData(air.id))
+    select_material(material_button, air.id)
 
     assert dialog.layup.layers[0].material_id == air.id
     assert dialog.layup.layers[0].layer_type is LayerType.FLUID
@@ -152,11 +171,25 @@ def test_layer_type_options_follow_selected_material(qtbot):
     assert type_combo.count() == 3
     assert type_combo.isEnabled()
 
-    material_combo = dialog.layer_table.cellWidget(0, 1)
-    material_combo.setCurrentIndex(material_combo.findData(air.id))
+    material_button = dialog.layer_table.cellWidget(0, 1)
+    assert isinstance(material_button, QToolButton)
+    assert not material_button.icon().isNull()
+    assert [action.text() for action in material_button.menu().actions()] == [
+        "Fluid", "Isomat"
+    ]
+    isomat_menu = material_button.menu().actions()[1].menu()
+    assert [action.text() for action in isomat_menu.actions()] == ["Aluminium"]
+    select_material(material_button, air.id)
     type_combo = dialog.layer_table.cellWidget(0, 3)
     assert type_combo.count() == 1
     assert not type_combo.isEnabled()
+    assert dialog.move_up_button.text() == ""
+    assert dialog.move_up_button.accessibleName() == "Move layer up"
+    assert not dialog.move_up_button.icon().isNull()
+    delete_button = dialog.layer_table.cellWidget(0, 5)
+    assert delete_button.text() == ""
+    assert delete_button.accessibleName() == "Delete layer"
+    assert not delete_button.icon().isNull()
 
 
 def test_perforation_button_opens_editor_and_updates_row(qtbot, monkeypatch):
@@ -248,4 +281,4 @@ def test_drop_event_reorders_model_and_rebuilds_embedded_widgets(qtbot):
 
     assert event.was_accepted
     assert dialog.layup.layers[0].material_id == aluminium.id
-    assert dialog.layer_table.cellWidget(0, 1).currentData() == aluminium.id
+    assert dialog.layer_table.cellWidget(0, 1).text() == "Aluminium"

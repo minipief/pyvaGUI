@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from pyvagui.model.layup import Layup
 from pyvagui.model.materials import MaterialSpec
@@ -36,6 +36,7 @@ class CalculationWorker(QObject):
 
     progress = pyqtSignal(int, int)
     layup_finished = pyqtSignal(str)
+    layup_result = pyqtSignal(object)
     finished = pyqtSignal(object)
     failed = pyqtSignal(str)
 
@@ -52,6 +53,7 @@ class CalculationWorker(QObject):
         self.materials = deepcopy(materials)
         self.cancel_requested = False
 
+    @pyqtSlot()
     def run(self) -> None:
         """Calculate selected layups and emit progress/results or an error."""
         total = len(self.layups)
@@ -71,6 +73,7 @@ class CalculationWorker(QObject):
                         values=values,
                     )
                 )
+                self.layup_result.emit(results[-1])
                 self.layup_finished.emit(
                     f"Finished '{layup.name}' ({index + 1}/{total})."
                 )

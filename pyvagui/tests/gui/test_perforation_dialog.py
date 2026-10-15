@@ -20,6 +20,9 @@ def test_perforation_dialog_saves_mm_as_si_values(qtbot):
     """Convert entered millimeter dimensions to meters on Save."""
     dialog = PerforationDialog(None)
     qtbot.addWidget(dialog)
+    assert dialog.remove_button.text() == ""
+    assert dialog.remove_button.accessibleName() == "Remove perforation"
+    assert not dialog.remove_button.icon().isNull()
     dialog.radius_edit.setText("1.5")
     dialog.distance_edit.setText("20")
 
@@ -66,4 +69,5 @@ def test_invalid_perforation_keeps_dialog_open_and_shows_errors(
 
     assert dialog.result() == QDialog.DialogCode.Rejected
     assert dialog.error_label.isVisible()
-    assert any("smaller than hole distance" in item for item in messages)
+    assert not messages
+    assert "smaller than hole distance" in dialog.error_label.text()

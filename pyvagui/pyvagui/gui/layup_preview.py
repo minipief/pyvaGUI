@@ -149,15 +149,21 @@ class LayupPreview(QWidget):
         # QPainter redraws this widget whenever Qt requests a paint event.
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#ffffff"))
 
         panel_rect = self.rect().adjusted(0, 0, -1, -1)
-        painter.setPen(QPen(QColor("#d9dee7"), 1))
-        painter.drawRoundedRect(panel_rect, 8, 8)
+        painter.setPen(QPen(QColor("#d6dde3"), 1))
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawRoundedRect(panel_rect, 10, 10)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
 
-        painter.setPen(QColor("#202938"))
+        title_font = painter.font()
+        title_font.setBold(True)
+        painter.setFont(title_font)
+        painter.setPen(QColor("#1f2a33"))
         painter.drawText(16, 25, "Stack preview")
-        painter.setPen(QColor("#697386"))
+        title_font.setBold(False)
+        painter.setFont(title_font)
+        painter.setPen(QColor("#66737e"))
         painter.drawText(16, 48, "Incident side (first layer at top)")
 
         stack_top = 64

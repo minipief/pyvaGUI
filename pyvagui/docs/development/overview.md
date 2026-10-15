@@ -149,8 +149,10 @@ flowchart TD
 
 ## Data and Units
 
-- Project files use JSON with `format_version: 1` and store materials,
-  layups, and solvers. They do not store window state or calculated results.
+- Project files use the `.pyvagui` extension and contain the existing JSON
+  structure with `format_version: 1`, materials, layups, and solvers. The
+  extension changes; the serialized project content does not. Files do not
+  store window state or calculated results.
 - The material library is stored separately under
   `%APPDATA%/pyvaGUI/library.json` on Windows or `~/.pyvagui/library.json`
   on other platforms. Missing libraries are initialized from bundled

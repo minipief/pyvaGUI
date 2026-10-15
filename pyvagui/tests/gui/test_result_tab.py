@@ -4,6 +4,7 @@ import csv
 
 import numpy as np
 import pytest
+from matplotlib.backend_bases import MouseEvent
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
@@ -67,6 +68,8 @@ def test_real_result_tab_plots_layups_on_log_frequency_axis(qtbot):
     ]
     assert tab.hint_label.isHidden()
     assert tab.export_button.isEnabled()
+    assert not tab.run_button.icon().isNull()
+    assert not tab.export_button.icon().isNull()
 
 
 def test_complex_result_tab_defaults_to_magnitude_and_phase(qtbot):
@@ -96,6 +99,65 @@ def test_complex_result_tab_defaults_to_magnitude_and_phase(qtbot):
     tab.view_checkboxes["real"].setChecked(True)
     assert len(tab.axes) == 3
     assert tab.axes[2].get_title() == "Real part"
+
+
+def test_plot_hover_previews_nearest_line_value(qtbot):
+    """Choose the nearest curve when multiple result lines are visible."""
+    tab = ResultTab(make_solver(SolverType.ABSORPTION), lambda: None)
+    qtbot.addWidget(tab)
+    tab.set_results(
+        make_result_set(
+            SolverType.ABSORPTION,
+            [
+                np.array([0.2, 0.5, 0.8]),
+                np.array([0.1, 0.4, 0.7]),
+            ],
+        )
+    )
+    tab.canvas.draw()
+    axis = tab.axes[0]
+    x, y = axis.transData.transform((1000.0, 0.4))
+    event = MouseEvent("motion_notify_event", tab.canvas, x, y)
+
+    tab._on_plot_hover(event)
+
+    annotation, marker = tab._hover_artists[axis]
+    assert annotation.get_visible()
+    assert "Air gap" in annotation.get_text()
+    assert "1000 Hz" in annotation.get_text()
+    assert "Value: 0.4" in annotation.get_text()
+    assert np.allclose(marker.get_offsets(), [[1000.0, 0.4]])
+
+
+def test_plot_hover_preview_flips_inside_top_right_border(qtbot):
+    """Flip the hover annotation inward near the plot's top-right edge."""
+    tab = ResultTab(make_solver(SolverType.ABSORPTION), lambda: None)
+    qtbot.addWidget(tab)
+    tab.set_results(
+        make_result_set(
+            SolverType.ABSORPTION,
+            [
+                np.array([0.2, 0.5, 0.8]),
+                np.array([0.1, 0.4, 0.7]),
+            ],
+        )
+    )
+    tab.canvas.draw()
+    axis = tab.axes[0]
+    x, y = axis.transData.transform((10000.0, 0.8))
+    event = MouseEvent("motion_notify_event", tab.canvas, x, y)
+
+    tab._on_plot_hover(event)
+    tab.canvas.draw()
+
+    annotation, _ = tab._hover_artists[axis]
+    bounds = annotation.get_window_extent(tab.canvas.get_renderer())
+
+    assert annotation.get_position() == (-12, -12)
+    assert bounds.x0 >= axis.bbox.x0
+    assert bounds.x1 <= axis.bbox.x1
+    assert bounds.y0 >= axis.bbox.y0
+    assert bounds.y1 <= axis.bbox.y1
 
 
 def test_result_tab_run_button_calls_main_window_callback(qtbot):
@@ -137,10 +199,15 @@ def test_result_tab_exports_csv_with_selected_complex_views(
         "getSaveFileName",
         lambda *args: (str(path), "CSV (*.csv)"),
     )
-    monkeypatch.setattr(QMessageBox, "information", lambda *args: None)
+    messages = []
+    monkeypatch.setattr(
+        QMessageBox, "information", lambda *args: messages.append(args)
+    )
 
     tab.export_results()
 
+    assert not messages
+    assert str(path) in tab.export_status_label.text()
     with path.open(encoding="utf-8", newline="") as file:
         rows = list(csv.reader(file))
     assert rows[0] == [

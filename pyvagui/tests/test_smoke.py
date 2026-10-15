@@ -1,5 +1,6 @@
 from math import isclose
 
+import pyvagui.__main__ as app_entry
 from pyvagui.model.materials import (
     EquivalentFluidSpec,
     FluidPropertiesSpec,
@@ -8,6 +9,61 @@ from pyvagui.model.materials import (
     PoroElasticMatSpec,
     material_from_dict,
 )
+
+
+def test_entrypoint_opens_pyvagui_argument(monkeypatch, tmp_path):
+    """Pass a double-clicked project path into the main window loader."""
+    project_path = tmp_path / "double-click.pyvagui"
+    loaded_paths = []
+
+    class FakeApplication:
+        def __init__(self, arguments):
+            self.arguments = arguments
+
+        def exec(self):
+            return 0
+
+    class FakeWindow:
+        def __init__(self):
+            pass
+
+        def _load_project(self, path):
+            loaded_paths.append(path)
+
+        def show(self):
+            pass
+
+    monkeypatch.setattr(app_entry, "QApplication", FakeApplication)
+    monkeypatch.setattr(app_entry, "MainWindow", FakeWindow)
+    monkeypatch.setattr(app_entry, "apply_theme", lambda application: None)
+
+    assert app_entry.main([str(project_path)]) == 0
+    assert loaded_paths == [project_path]
+
+
+def test_entrypoint_dispatches_worker_without_creating_gui(monkeypatch):
+    """Run the packaged worker mode before constructing QApplication."""
+    calls = []
+    monkeypatch.setattr(
+        "pyvagui.services.calculation_process.main",
+        lambda payload, messages: calls.append((payload, messages)) or 0,
+    )
+    monkeypatch.setattr(
+        app_entry,
+        "QApplication",
+        lambda *args: (_ for _ in ()).throw(
+            AssertionError("Worker mode must not create a GUI")
+        ),
+    )
+
+    status = app_entry.main([
+        "--calculation-worker",
+        "payload.json",
+        "messages.jsonl",
+    ])
+
+    assert status == 0
+    assert calls == [("payload.json", "messages.jsonl")]
 
 
 def test_fluid_specs_share_common_properties():
