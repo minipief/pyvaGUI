@@ -1,4 +1,8 @@
 from math import isclose
+import ctypes
+import runpy
+import shutil
+from types import SimpleNamespace
 
 import pyvagui.__main__ as app_entry
 from pyvagui.model.materials import (
@@ -11,14 +15,24 @@ from pyvagui.model.materials import (
 )
 
 
-def test_entrypoint_opens_pyvagui_argument(monkeypatch, tmp_path):
+def test_entrypoint_opens_pyvagui_argument(monkeypatch, tmp_path, qtbot):
     """Pass a double-clicked project path into the main window loader."""
     project_path = tmp_path / "double-click.pyvagui"
     loaded_paths = []
+    startup_events = []
 
     class FakeApplication:
         def __init__(self, arguments):
             self.arguments = arguments
+            startup_events.append("application")
+
+        def setApplicationName(self, name):
+            assert name == "pyvaGUI"
+
+        def setWindowIcon(self, icon):
+            assert not icon.isNull()
+            assert not icon.pixmap(32, 32).isNull()
+            startup_events.append("icon")
 
         def exec(self):
             return 0
@@ -36,9 +50,30 @@ def test_entrypoint_opens_pyvagui_argument(monkeypatch, tmp_path):
     monkeypatch.setattr(app_entry, "QApplication", FakeApplication)
     monkeypatch.setattr(app_entry, "MainWindow", FakeWindow)
     monkeypatch.setattr(app_entry, "apply_theme", lambda application: None)
+    monkeypatch.setattr(app_entry.sys, "platform", "win32")
+    monkeypatch.setattr(
+        ctypes,
+        "windll",
+        SimpleNamespace(shell32=SimpleNamespace(
+            SetCurrentProcessExplicitAppUserModelID=startup_events.append,
+        )),
+        raising=False,
+    )
 
     assert app_entry.main([str(project_path)]) == 0
     assert loaded_paths == [project_path]
+    assert startup_events == ["pyvagui.pyvaGUI", "application", "icon"]
+
+
+def test_entrypoint_resources_are_relative_to_package(tmp_path):
+    """Find bundled icons even when the entry script is outside the package."""
+    script_path = tmp_path / "__main__.py"
+    shutil.copyfile(app_entry.__file__, script_path)
+
+    namespace = runpy.run_path(str(script_path), run_name="frozen_entrypoint")
+
+    assert namespace["RESOURCES"] == app_entry.RESOURCES
+    assert (namespace["RESOURCES"] / "AppIcon" / "AppIcon.ico").is_file()
 
 
 def test_entrypoint_dispatches_worker_without_creating_gui(monkeypatch):

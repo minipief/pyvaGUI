@@ -3,13 +3,16 @@
 import sys
 from pathlib import Path
 
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
+from pyvagui import gui
 from pyvagui.gui.main_window import MainWindow
 from pyvagui.gui.theme import apply_theme
 
 
 CALCULATION_WORKER_FLAG = "--calculation-worker"
+RESOURCES = Path(gui.__file__).parent.parent / "resources"
 
 
 def project_path_argument(arguments: list[str]) -> Path | None:
@@ -38,7 +41,14 @@ def main(arguments: list[str] | None = None) -> int:
         return run_worker(arguments[1], arguments[2])
 
     project_path = project_path_argument(arguments)
+    if sys.platform == "win32":
+        from ctypes import windll
+
+        windll.shell32.SetCurrentProcessExplicitAppUserModelID("pyvagui.pyvaGUI")
+
     application = QApplication(sys.argv[:1])
+    application.setApplicationName("pyvaGUI")
+    application.setWindowIcon(QIcon(str(RESOURCES / "AppIcon" / "AppIcon.ico")))
     apply_theme(application)
     window = MainWindow()
     if project_path is not None:

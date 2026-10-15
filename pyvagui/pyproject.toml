@@ -26,7 +26,7 @@ dev = [
 include = ["pyvagui*"]
 
 [tool.setuptools.package-data]
-pyvagui = ["resources/*.json", "resources/icons/*.svg"]
+pyvagui = ["resources/*.json", "resources/icons/*.svg", "resources/AppIcon/*.ico"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

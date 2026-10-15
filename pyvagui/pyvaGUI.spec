@@ -1,6 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_data_files
 from PyInstaller.utils.hooks import collect_all
+
+project_root = Path(SPECPATH)
+app_icon = project_root / 'pyvagui' / 'resources' / 'AppIcon' / 'AppIcon.ico'
 
 datas = []
 binaries = []
@@ -31,6 +36,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='pyvaGUI',
+    icon=str(app_icon),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
