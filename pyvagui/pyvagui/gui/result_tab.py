@@ -4,8 +4,6 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-from matplotlib.figure import Figure
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -52,6 +50,9 @@ class ResultTab(QWidget):
         parent: QWidget | None = None,
     ):
         """Build the result header, canvas, and optional view controls."""
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+        from matplotlib.figure import Figure
+
         super().__init__(parent)
         self.solver = solver
         self.run_callback = run_callback

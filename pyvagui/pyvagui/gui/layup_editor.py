@@ -265,6 +265,9 @@ class LayupEditorDialog(QDialog):
         material_button.setPopupMode(
             QToolButton.ToolButtonPopupMode.InstantPopup
         )
+        material_button.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
         material_menu = QMenu(material_button)
         for category, material_type in MATERIAL_GROUPS:
             category_materials = sorted(

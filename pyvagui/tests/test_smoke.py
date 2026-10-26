@@ -1,7 +1,11 @@
 from math import isclose
 import ctypes
+import os
+from pathlib import Path
 import runpy
 import shutil
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pyvagui.__main__ as app_entry
@@ -13,6 +17,31 @@ from pyvagui.model.materials import (
     PoroElasticMatSpec,
     material_from_dict,
 )
+
+
+def test_empty_window_does_not_load_calculation_or_plotting_backends():
+    """Keep expensive optional-at-startup imports out of the first window."""
+    subprocess.run(
+        [sys.executable, "-c", """
+import sys
+from PyQt6.QtWidgets import QApplication
+from pyvagui.gui.main_window import MainWindow
+
+application = QApplication([])
+window = MainWindow()
+window.show()
+application.processEvents()
+for module in ("pyva", "scipy", "matplotlib"):
+    assert module not in sys.modules, f"Startup eagerly loaded {module}"
+window.close()
+"""],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
 
 
 def test_entrypoint_opens_pyvagui_argument(monkeypatch, tmp_path, qtbot):

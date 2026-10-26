@@ -4,12 +4,16 @@ These functions are application services: they translate in-memory model
 objects into user-selected files without adding GUI dependencies.
 """
 
+from __future__ import annotations
+
 import csv
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 import numpy as np
-from matplotlib.figure import Figure
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
 
 from pyvagui.model.results import ResultSet
 

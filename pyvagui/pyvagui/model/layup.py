@@ -5,13 +5,16 @@ and converts them to pyva objects only when a calculation model is built.
 All physical values are in SI units.
 """
 
+from __future__ import annotations
+
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
 
-import pyva.models as pyva_models
-import pyva.systems.infiniteLayers as pyva_layers
-from pyva.properties.structuralPropertyClasses import PlateProp
+if TYPE_CHECKING:
+    import pyva.models as pyva_models
+    import pyva.systems.infiniteLayers as pyva_layers
 
 from pyvagui.model.materials import (
     DelanyBazleySpec,
@@ -66,6 +69,8 @@ class PerforationSpec:
             Perforation object accepted by pyva plate and mass layers.
         """
         # pyva calculates the transfer impedance of a square hole pattern.
+        import pyva.systems.infiniteLayers as pyva_layers
+
         return pyva_layers.PerforatedLayer(
             thickness=thickness,
             hole_radius=self.hole_radius,
@@ -198,6 +203,9 @@ class LayerSpec:
         ValueError
             If this layer fails validation.
         """
+        import pyva.systems.infiniteLayers as pyva_layers
+        from pyva.properties.structuralPropertyClasses import PlateProp
+
         errors = self.validate(materials)
         if errors:
             raise ValueError("Cannot build layer: " + " ".join(errors))
@@ -432,6 +440,8 @@ class Layup:
             layer.build(materials) for layer in self.layers
         )
         # TMmodel combines the infinite layers in incident-to-receiving order.
+        import pyva.models as pyva_models
+
         return pyva_models.TMmodel(pyva_layer_objects)
 
     def validate(self, materials: dict[str, MaterialSpec]) -> list[str]:

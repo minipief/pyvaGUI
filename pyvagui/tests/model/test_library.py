@@ -152,6 +152,22 @@ def test_library_rejects_duplicate_ids(tmp_path):
         library.add(material)
 
 
+def test_library_update_preserves_identifier_and_order(tmp_path):
+    """Replace an existing entry without moving or re-identifying it."""
+    first = FluidSpec(name="Air")
+    second = IsoMatSpec(name="Aluminium")
+    updated = FluidSpec(name="Water", id=first.id)
+    library = MaterialLibrary(tmp_path / "library.json")
+    library.materials = [first, second]
+
+    previous = library.update(updated)
+
+    assert previous is first
+    assert library.materials == [updated, second]
+    with pytest.raises(KeyError, match="Material does not exist"):
+        library.update(FluidSpec(name="Missing"))
+
+
 def test_export_selected_materials_and_import_with_new_ids(tmp_path):
     """Export selected materials and assign fresh ids on import."""
     path = tmp_path / "library.json"

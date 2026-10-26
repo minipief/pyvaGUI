@@ -3,9 +3,10 @@
 import json
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QFileDialog, QMessageBox, QDialog
+from PyQt6.QtWidgets import QFileDialog, QMessageBox, QDialog, QMenu
 
 from pyvagui.gui.library_dialog import LibraryDialog
+from pyvagui.gui.material_editor import MaterialEditorDialog
 from pyvagui.model.library import MaterialLibrary
 from pyvagui.model.materials import (
     FluidSpec,
@@ -62,8 +63,21 @@ def test_library_sorts_names_and_selects_category_folder(qtbot, tmp_path):
     assert not dialog.add_to_project_button.isEnabled()
     assert not dialog.export_button.isEnabled()
     assert not dialog.delete_button.isEnabled()
+    assert not dialog.new_material_button.isHidden()
+    assert dialog.import_button.text() == ""
+    assert dialog.export_button.text() == ""
     assert dialog.delete_button.text() == ""
-    assert dialog.delete_button.accessibleName() == "Delete selected materials"
+    assert dialog.import_button.accessibleName() == "Import materials"
+    assert dialog.export_button.accessibleName() == (
+        "Export selected materials"
+    )
+    assert dialog.delete_button.accessibleName() == (
+        "Delete selected materials"
+    )
+    assert dialog.delete_action.text() == "Delete"
+    assert not dialog.delete_action.icon().isNull()
+    assert not dialog.import_button.icon().isNull()
+    assert not dialog.export_button.icon().isNull()
     assert not dialog.delete_button.icon().isNull()
     assert dialog.close_button.text() == ""
     assert dialog.close_button.accessibleName() == "Close material library"
@@ -242,6 +256,112 @@ def test_import_materials_action_adds_new_ids_and_saves_library(
     assert imported_material.id != imported_source.id
     assert library.path.exists()
     assert dialog.material_tree.topLevelItem(0).childCount() == 1
+
+
+def test_create_material_from_library_persists_new_material(
+    qtbot, tmp_path, monkeypatch
+):
+    """Create a validated material directly in the reusable library."""
+    library = MaterialLibrary(tmp_path / "library.json")
+    library.save()
+    dialog = LibraryDialog(Project(), library)
+    qtbot.addWidget(dialog)
+
+    def accept_material(editor):
+        editor.name_edit.setText("Water")
+        editor.field_widgets["c0"].setText("1480")
+        editor.save_material()
+        return editor.result()
+
+    monkeypatch.setattr(MaterialEditorDialog, "exec", accept_material)
+
+    dialog.create_material()
+
+    assert len(library.materials) == 1
+    assert library.materials[0].name == "Water"
+    assert library.materials[0].c0 == 1480
+    assert library.path.exists()
+    assert dialog.material_tree.topLevelItem(0).child(0).text(0) == "Water"
+
+
+def test_edit_selected_material_updates_library_entry_in_place(
+    qtbot, tmp_path, monkeypatch
+):
+    """Persist edits while keeping the material's ID and tree position."""
+    library, air, _, _ = make_library(tmp_path)
+    dialog = LibraryDialog(Project(), library)
+    qtbot.addWidget(dialog)
+    dialog.material_tree.setCurrentItem(
+        dialog.material_tree.topLevelItem(0).child(0)
+    )
+
+    def accept_edit(editor):
+        editor.name_edit.setText("Dry air")
+        editor.field_widgets["c0"].setText("344")
+        editor.save_material()
+        return editor.result()
+
+    monkeypatch.setattr(MaterialEditorDialog, "exec", accept_edit)
+
+    item = dialog.material_tree.topLevelItem(0).child(0)
+    dialog.material_tree.itemDoubleClicked.emit(item, 0)
+
+    updated = next(item for item in library.materials if item.id == air.id)
+    assert updated.name == "Dry air"
+    assert updated.c0 == 344
+    assert library.materials[0].id == air.id
+    assert dialog.material_tree.topLevelItem(0).child(0).text(0) == "Dry air"
+    persisted = MaterialLibrary(library.path)
+    assert next(item for item in persisted.load() if item.id == air.id).name == (
+        "Dry air"
+    )
+
+
+def test_left_click_delete_button_deletes_selected_material(
+    qtbot, tmp_path, monkeypatch
+):
+    """Delete the selected material from the icon-only toolbar button."""
+    library, air, _, _ = make_library(tmp_path)
+    dialog = LibraryDialog(Project(), library)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    item = dialog.material_tree.topLevelItem(0).child(0)
+    dialog.material_tree.setCurrentItem(item)
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args: QMessageBox.StandardButton.Yes,
+    )
+
+    qtbot.mouseClick(dialog.delete_button, Qt.MouseButton.LeftButton)
+
+    assert all(material.id != air.id for material in library.materials)
+    assert dialog.material_tree.topLevelItem(0).childCount() == 0
+
+
+def test_right_click_material_offers_delete_context_action(
+    qtbot, tmp_path, monkeypatch
+):
+    """Keep Delete available in a tree-row context menu."""
+    library, air, _, _ = make_library(tmp_path)
+    dialog = LibraryDialog(Project(), library)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    item = dialog.material_tree.topLevelItem(0).child(0)
+    position = dialog.material_tree.visualItemRect(item).center()
+    shown_actions = []
+    monkeypatch.setattr(
+        QMenu,
+        "exec",
+        lambda menu, *args: shown_actions.extend(menu.actions()),
+    )
+
+    dialog._show_material_context_menu(position)
+
+    assert dialog._selected_ids() == [air.id]
+    assert [action.text() for action in shown_actions] == ["Delete"]
 
 
 def test_export_selected_action_adds_json_extension(

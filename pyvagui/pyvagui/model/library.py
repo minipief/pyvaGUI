@@ -123,6 +123,30 @@ class MaterialLibrary:
                 return material
         raise KeyError(f"Material does not exist: {material_id}")
 
+    def update(self, material: MaterialSpec) -> MaterialSpec:
+        """Replace a material while preserving its identifier and position.
+
+        Parameters
+        ----------
+        material : MaterialSpec
+            Updated material with the identifier of an existing entry.
+
+        Returns
+        -------
+        MaterialSpec
+            Previous material value.
+
+        Raises
+        ------
+        KeyError
+            If the identifier is not in the library.
+        """
+        for index, existing in enumerate(self.materials):
+            if existing.id == material.id:
+                self.materials[index] = material
+                return existing
+        raise KeyError(f"Material does not exist: {material.id}")
+
     def export_materials(
         self, ids: list[str], path: str | Path
     ) -> None:

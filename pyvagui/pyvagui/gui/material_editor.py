@@ -92,6 +92,9 @@ class MaterialEditorDialog(QDialog):
         Material library used by the optional library actions.
     parent : QWidget or None, optional
         Parent widget that owns the dialog.
+    library_context : bool, optional
+        Allow frame references to other library materials while managing the
+        library directly.
     """
 
     def __init__(
@@ -100,11 +103,13 @@ class MaterialEditorDialog(QDialog):
         material: MaterialSpec | None = None,
         library: MaterialLibrary | None = None,
         parent: QWidget | None = None,
+        library_context: bool = False,
     ):
         """Build a material form without changing the project on cancel."""
         super().__init__(parent)
         self.project = project
         self.library = library
+        self.library_context = library_context
         self.is_new = material is None
         self.material_spec = (
             FluidSpec() if material is None else copy.deepcopy(material)
@@ -173,7 +178,9 @@ class MaterialEditorDialog(QDialog):
         self.save_to_library_button = QPushButton("Save to library", self)
         self.save_to_library_button.setIcon(ACTION_ICONS["save"])
         self.save_to_library_button.setVisible(
-            not self.is_new and self.library is not None
+            not self.is_new
+            and self.library is not None
+            and not self.library_context
         )
         self.save_to_library_button.clicked.connect(self.save_to_library)
         button_row.addWidget(self.save_to_library_button)
@@ -278,6 +285,16 @@ class MaterialEditorDialog(QDialog):
             available_materials = (
                 self.project.materials + self.additional_materials
             )
+            if self.library_context and self.library is not None:
+                available_ids = {
+                    material.id for material in available_materials
+                }
+                available_materials.extend(
+                    material
+                    for material in self.library.materials
+                    if isinstance(material, IsoMatSpec)
+                    and material.id not in available_ids
+                )
             for project_material in available_materials:
                 if isinstance(project_material, IsoMatSpec):
                     combo.addItem(
@@ -331,6 +348,19 @@ class MaterialEditorDialog(QDialog):
                     (
                         material
                         for material in self.additional_materials
+                        if material.id == self.material_spec.solid_mat_id
+                    ),
+                    None,
+                )
+            if (
+                not isinstance(frame, IsoMatSpec)
+                and self.library_context
+                and self.library is not None
+            ):
+                frame = next(
+                    (
+                        material
+                        for material in self.library.materials
                         if material.id == self.material_spec.solid_mat_id
                     ),
                     None,

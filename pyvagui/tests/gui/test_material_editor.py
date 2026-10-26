@@ -136,6 +136,29 @@ def test_poroelastic_dialog_offers_only_project_isomats(qtbot):
     assert frame_combo.currentData() == frame.id
 
 
+def test_library_editor_accepts_existing_library_frame(qtbot, tmp_path):
+    """Allow library materials to retain references to library Isomats."""
+    frame = IsoMatSpec(name="Library frame")
+    foam = PoroElasticMatSpec(
+        name="Library foam",
+        solid_mat_id=frame.id,
+    )
+    library = MaterialLibrary(tmp_path / "library.json")
+    library.materials = [frame, foam]
+    dialog = MaterialEditorDialog(
+        Project(),
+        foam,
+        library,
+        library_context=True,
+    )
+    qtbot.addWidget(dialog)
+    frame_combo = dialog.field_widgets["solid_mat_id"]
+
+    assert frame_combo.findData(frame.id) >= 0
+    assert dialog._validation_errors() == []
+    assert not dialog.save_to_library_button.isVisible()
+
+
 def test_poroelastic_dialog_accepts_frame_copy_from_library(qtbot):
     """Validate a selected poroelastic copy against its pending frame copy."""
     frame_copy = IsoMatSpec(name="Library frame")

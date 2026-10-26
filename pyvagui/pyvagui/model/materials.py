@@ -8,12 +8,15 @@ before a calculation.
 All physical values are given in SI units.
 """
 
+from __future__ import annotations
+
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field, replace
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-import pyva.properties.materialClasses as matC
+if TYPE_CHECKING:
+    import pyva.properties.materialClasses as matC
 
 
 def new_id() -> str:
@@ -218,6 +221,8 @@ class FluidSpec(DampedFluidPropertiesSpec):
         matC.Fluid
             The pyva fluid object.
         """
+        import pyva.properties.materialClasses as matC
+
         return matC.Fluid(
             c0=self.c0,
             rho0=self.rho0,
@@ -289,6 +294,8 @@ class EquivalentFluidSpec(DampedFluidPropertiesSpec):
         matC.EquivalentFluid
             The pyva equivalent fluid object.
         """
+        import pyva.properties.materialClasses as matC
+
         return matC.EquivalentFluid(
             flow_res=self.flow_res,
             porosity=self.porosity,
@@ -360,6 +367,8 @@ class DelanyBazleySpec(DampedFluidPropertiesSpec):
         matC.DelanyBazley
             The pyva Delany-Bazley object.
         """
+        import pyva.properties.materialClasses as matC
+
         return matC.DelanyBazley(
             flow_res=self.flow_res,
             c0=self.c0,
@@ -425,6 +434,8 @@ class IsoMatSpec(MaterialSpec):
         matC.IsoMat
             The pyva isotropic material object.
         """
+        import pyva.properties.materialClasses as matC
+
         return matC.IsoMat(
             E=self.E,
             rho0=self.rho0,
@@ -515,6 +526,8 @@ class PoroElasticMatSpec(FluidPropertiesSpec):
             raise ValueError(
                 f"{self.name}: frame material must be an Isomat."
             )
+        import pyva.properties.materialClasses as matC
+
         return matC.PoroElasticMat(
             solid_mat=solid.to_pyva(materials),
             flow_res=self.flow_res,

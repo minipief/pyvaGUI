@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QMenu,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -17,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from pyvagui.gui.tree_icons import ACTION_ICONS, TREE_ICONS
+from pyvagui.gui.theme import make_rounded_popup
 from pyvagui.model.library import MaterialLibrary
 from pyvagui.model.materials import (
     DelanyBazleySpec,
@@ -88,6 +90,15 @@ class LibraryDialog(QDialog):
         self.material_tree.setHeaderHidden(True)
         self.material_tree.setIndentation(14)
         self.material_tree.setUniformRowHeights(True)
+        self.material_tree.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.material_tree.customContextMenuRequested.connect(
+            self._show_material_context_menu
+        )
+        self.material_tree.itemDoubleClicked.connect(
+            self.edit_library_item
+        )
         self.material_tree.setSelectionMode(
             QTreeWidget.SelectionMode.SingleSelection
             if self.selection_only
@@ -104,17 +115,24 @@ class LibraryDialog(QDialog):
         layout.addWidget(self.status_label)
 
         actions = QHBoxLayout()
+        self.new_material_button = QPushButton("New material", self)
         self.add_to_project_button = QPushButton("Add to project", self)
-        self.import_button = QPushButton("Import...", self)
-        self.export_button = QPushButton("Export selected...", self)
-        self.delete_button = QPushButton("Delete", self)
-        self.close_button = QPushButton("Close", self)
+        self.import_button = QPushButton(self)
+        self.export_button = QPushButton(self)
+        self.delete_button = QPushButton(self)
 
+        self.new_material_button.clicked.connect(self.create_material)
         self.add_to_project_button.clicked.connect(self.add_to_project)
         self.import_button.clicked.connect(self.import_materials)
         self.export_button.clicked.connect(self.export_selected)
         self.delete_button.clicked.connect(self.delete_selected)
-        self.close_button.clicked.connect(self.reject)
+
+        self.material_actions_menu = QMenu(self)
+        make_rounded_popup(self.material_actions_menu)
+        self.delete_action = self.material_actions_menu.addAction(
+            ACTION_ICONS["trash"], "Delete"
+        )
+        self.delete_action.triggered.connect(self.delete_selected)
 
         self.add_to_project_button.setText(
             "Select" if self.selection_only else "Add to project"
@@ -122,30 +140,32 @@ class LibraryDialog(QDialog):
         self.delete_button.setVisible(not self.selection_only)
         self.import_button.setVisible(not self.selection_only)
         self.export_button.setVisible(not self.selection_only)
+        self.new_material_button.setVisible(not self.selection_only)
+        self.delete_button.setEnabled(False)
         self.add_to_project_button.setObjectName("primaryButton")
-        self.delete_button.setObjectName("dangerButton")
+        self.new_material_button.setIcon(ACTION_ICONS["new"])
         self.add_to_project_button.setIcon(ACTION_ICONS["plus-white"])
         self.import_button.setIcon(ACTION_ICONS["import"])
         self.export_button.setIcon(ACTION_ICONS["export"])
         self.delete_button.setIcon(ACTION_ICONS["trash"])
-        self.delete_button.setText("")
-        self.delete_button.setToolTip("Delete selected materials")
-        self.delete_button.setAccessibleName("Delete selected materials")
-        self.delete_button.setFixedSize(38, 38)
-        self.close_button.setIcon(ACTION_ICONS["close"])
-        self.close_button.setText("")
-        self.close_button.setToolTip("Close material library")
-        self.close_button.setAccessibleName("Close material library")
-        self.close_button.setFixedSize(38, 38)
+        self.delete_button.setObjectName("dangerButton")
+        for button, label in (
+            (self.import_button, "Import materials"),
+            (self.export_button, "Export selected materials"),
+            (self.delete_button, "Delete selected materials"),
+        ):
+            button.setToolTip(label)
+            button.setAccessibleName(label)
+            button.setFixedSize(38, 38)
 
         for button in (
+            self.new_material_button,
             self.import_button,
             self.export_button,
             self.delete_button,
         ):
             actions.addWidget(button)
         actions.addStretch(1)
-        actions.addWidget(self.close_button)
         actions.addWidget(self.add_to_project_button)
         layout.addLayout(actions)
 
@@ -178,6 +198,98 @@ class LibraryDialog(QDialog):
         self.add_to_project_button.setEnabled(has_selection)
         self.export_button.setEnabled(has_selection)
         self.delete_button.setEnabled(has_selection)
+
+    def create_material(self) -> None:
+        """Create a new material directly in the persistent library."""
+        from pyvagui.gui.material_editor import MaterialEditorDialog
+
+        dialog = MaterialEditorDialog(
+            self.project,
+            library=self.library,
+            parent=self,
+            library_context=True,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._save_library_material(dialog.material)
+
+    def edit_library_item(
+        self, item: QTreeWidgetItem, column: int = 0
+    ) -> None:
+        """Edit a material activated by a double-click."""
+        if self.selection_only:
+            return
+        material_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if material_id is None:
+            return
+        material = next(
+            (entry for entry in self.library.materials
+             if entry.id == material_id),
+            None,
+        )
+        if material is None:
+            return
+        from pyvagui.gui.material_editor import MaterialEditorDialog
+
+        dialog = MaterialEditorDialog(
+            self.project,
+            material,
+            self.library,
+            self,
+            library_context=True,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._save_library_material(dialog.material)
+
+    def _show_material_context_menu(self, position) -> None:
+        """Offer deletion for the clicked material or selected folder."""
+        item = self.material_tree.itemAt(position)
+        if item is None:
+            return
+        if not item.isSelected():
+            self.material_tree.clearSelection()
+            item.setSelected(True)
+        self._update_selection_actions()
+        if not self.delete_button.isEnabled():
+            return
+        self.material_actions_menu.exec(
+            self.material_tree.viewport().mapToGlobal(position)
+        )
+
+    def _save_library_material(
+        self, material: MaterialSpec | None
+    ) -> None:
+        """Persist a created or edited material and restore state on error."""
+        if material is None:
+            return
+        previous = next(
+            (
+                item
+                for item in self.library.materials
+                if item.id == material.id
+            ),
+            None,
+        )
+        try:
+            if previous is None:
+                self.library.add(material)
+            else:
+                self.library.update(material)
+            self.library.save()
+        except (KeyError, OSError, ValueError) as error:
+            if previous is None:
+                if any(
+                    item.id == material.id for item in self.library.materials
+                ):
+                    self.library.remove(material.id)
+            else:
+                self.library.update(previous)
+            QMessageBox.critical(self, "Material library", str(error))
+            return
+        self.refresh()
+        self.status_label.setText(f"Saved '{material.name}' to the library.")
+        self.status_label.show()
 
     def add_to_project(self) -> None:
         """Copy the selected material or materials into the project.

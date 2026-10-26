@@ -1,6 +1,6 @@
 """Tests for layup layer editing and row reordering."""
 
-from PyQt6.QtCore import QCoreApplication, QPointF
+from PyQt6.QtCore import QCoreApplication, QPointF, Qt
 from PyQt6.QtWidgets import QComboBox, QDialog, QMessageBox, QToolButton
 
 from pyvagui.gui.layup_editor import LayupEditorDialog
@@ -174,6 +174,10 @@ def test_layer_type_options_follow_selected_material(qtbot):
     material_button = dialog.layer_table.cellWidget(0, 1)
     assert isinstance(material_button, QToolButton)
     assert not material_button.icon().isNull()
+    assert material_button.text() == "Aluminium"
+    assert material_button.toolButtonStyle() == (
+        Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+    )
     assert [action.text() for action in material_button.menu().actions()] == [
         "Fluid", "Isomat"
     ]
