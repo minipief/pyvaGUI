@@ -3,8 +3,9 @@
 from string import Template
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QPalette
-from PyQt6.QtWidgets import QApplication, QMenu
+from PyQt6.QtCore import QSize
+from PyQt6.QtGui import QColor, QGuiApplication, QPalette
+from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from pyvagui.gui.tree_icons import RESOURCE_PATH
 
@@ -364,6 +365,45 @@ def apply_theme(application: QApplication) -> None:
     application.setStyle("Fusion")
     application.setPalette(light_palette())
     application.setStyleSheet(STYLE_SHEET)
+
+
+def available_screen_size(widget: QWidget) -> QSize:
+    """Return the usable desktop size of the screen showing a widget.
+
+    Parameters
+    ----------
+    widget : QWidget
+        Window or dialog. Unshown dialogs use their parent's screen.
+
+    Returns
+    -------
+    QSize
+        Available screen size excluding task bars and docks.
+    """
+    parent = widget.parentWidget()
+    screen = (
+        parent.window().screen() if parent is not None else widget.screen()
+    ) or QGuiApplication.primaryScreen()
+    return screen.availableGeometry().size()
+
+
+def resize_to_screen(
+    widget: QWidget, width_fraction: float, height_fraction: float
+) -> None:
+    """Resize a window to a fraction of its screen's available area.
+
+    Parameters
+    ----------
+    widget : QWidget
+        Window or dialog to resize.
+    width_fraction, height_fraction : float
+        Share of the available screen width and height between 0 and 1.
+    """
+    available = available_screen_size(widget)
+    widget.resize(
+        round(available.width() * width_fraction),
+        round(available.height() * height_fraction),
+    )
 
 
 def make_rounded_popup(menu: QMenu) -> None:

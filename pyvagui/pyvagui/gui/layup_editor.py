@@ -32,6 +32,7 @@ from pyvagui.gui.perforation_dialog import (
     m_to_mm,
     mm_to_m,
 )
+from pyvagui.gui.theme import resize_to_screen
 from pyvagui.gui.tree_icons import ACTION_ICONS, TREE_ICONS
 from pyvagui.model.layup import LayerSpec, LayerType, Layup, PerforationSpec
 from pyvagui.model.materials import MaterialSpec
@@ -142,7 +143,7 @@ class LayupEditorDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
-        self.resize(1500, 600)
+        resize_to_screen(self, 0.78, 0.6)
         name_form = QFormLayout()
         self.name_edit = QLineEdit(self.layup.name, self)
         self.name_edit.setPlaceholderText("Layup name")

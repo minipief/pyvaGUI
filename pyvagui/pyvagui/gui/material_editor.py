@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from pyvagui.gui.library_dialog import LibraryDialog, MATERIAL_GROUPS
+from pyvagui.gui.theme import available_screen_size
 from pyvagui.gui.tree_icons import ACTION_ICONS
 from pyvagui.model.library import MaterialLibrary
 from pyvagui.model.materials import (
@@ -131,7 +132,9 @@ class MaterialEditorDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
-        self.setMinimumWidth(480)
+        self.setMinimumWidth(
+            round(available_screen_size(self).width() * 0.25)
+        )
         header_form = QFormLayout()
         header_form.setHorizontalSpacing(16)
         self.name_edit = QLineEdit(self.material_spec.name, self)

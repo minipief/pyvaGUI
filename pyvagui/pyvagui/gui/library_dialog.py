@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from pyvagui.gui.tree_icons import ACTION_ICONS, TREE_ICONS
-from pyvagui.gui.theme import make_rounded_popup
+from pyvagui.gui.theme import make_rounded_popup, resize_to_screen
 from pyvagui.model.library import MaterialLibrary
 from pyvagui.model.materials import (
     DelanyBazleySpec,
@@ -72,7 +72,7 @@ class LibraryDialog(QDialog):
         self.additional_materials: list[MaterialSpec] = []
 
         self.setWindowTitle("Material library")
-        self.resize(720, 520)
+        resize_to_screen(self, 0.4, 0.5)
         self._build_interface()
         try:
             if not self.library.materials:

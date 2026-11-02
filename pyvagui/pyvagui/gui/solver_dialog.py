@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from pyvagui.gui.material_editor import parse_float
+from pyvagui.gui.theme import available_screen_size
 from pyvagui.model.materials import FluidSpec
 from pyvagui.model.project import Project
 from pyvagui.model.solvers import (
@@ -76,7 +77,9 @@ class SolverEditorDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(
+            round(available_screen_size(self).width() * 0.24)
+        )
         name_form = QFormLayout()
         self.name_edit = QLineEdit(self.solver_spec.name, self)
         name_form.addRow("Name", self.name_edit)

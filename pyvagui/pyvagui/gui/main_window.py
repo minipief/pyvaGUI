@@ -32,7 +32,11 @@ from pyvagui.gui.layup_editor import LayupEditorDialog
 from pyvagui.gui.material_editor import MaterialEditorDialog
 from pyvagui.gui.result_tab import ResultTab
 from pyvagui.gui.solver_dialog import SolverEditorDialog
-from pyvagui.gui.theme import STYLE_SHEET, make_rounded_popup
+from pyvagui.gui.theme import (
+    STYLE_SHEET,
+    make_rounded_popup,
+    resize_to_screen,
+)
 from pyvagui.gui.tree_icons import ACTION_ICONS, TREE_ICONS
 from pyvagui.model.library import MaterialLibrary
 from pyvagui.model.materials import PoroElasticMatSpec
@@ -80,7 +84,7 @@ class MainWindow(QMainWindow):
             self._read_calculation_output
         )
         self.result_sets: dict[str, ResultSet] = {}
-        self.resize(1600, 900)
+        resize_to_screen(self, 0.85, 0.85)
 
         self.log_panel = QPlainTextEdit(self)
         self.log_panel.setReadOnly(True)
