@@ -8,7 +8,7 @@ import tempfile
 
 import numpy as np
 from PyQt6.QtCore import QProcess, QTimer, Qt
-from PyQt6.QtGui import QAction, QCloseEvent, QFontMetrics, QKeySequence
+from PyQt6.QtGui import QAction, QCloseEvent, QKeySequence
 from PyQt6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -68,6 +68,7 @@ class MainWindow(QMainWindow):
         self._calculation_cancelled = False
         self._calculation_busy = False
         self._project_view_initialized = False
+        self._tree_fitted_on_show = False
         self._calculation_kill_timer = QTimer(self)
         self._calculation_kill_timer.setSingleShot(True)
         self._calculation_kill_timer.timeout.connect(
@@ -364,28 +365,33 @@ class MainWindow(QMainWindow):
                 if item_path in selected_paths:
                     item.setSelected(True)
         self._project_view_initialized = True
-        font_metrics = QFontMetrics(self.model_tree.font())
-        content_width = max(
-            (
-                font_metrics.horizontalAdvance(item.text(0))
-                + self.model_tree.iconSize().width()
-                + 12
-                + len(self._tree_item_path(item))
-                * self.model_tree.indentation()
-                for item in self._all_tree_items()
-            ),
-            default=120,
-        )
+        self._fit_tree_width()
+        self._refresh_result_tabs()
+        self._update_window_title()
+
+    def _fit_tree_width(self) -> None:
+        """Widen the navigation panel so every tree label is fully visible."""
+        # Polishing applies the style sheet font and item padding to size hints.
+        self.model_tree.ensurePolished()
+        content_width = max(self.model_tree.sizeHintForColumn(0), 120)
         self.model_tree.setColumnWidth(0, content_width)
+        margins = self.model_panel.layout().contentsMargins()
         tree_width = (
             content_width
             + 2 * self.model_tree.frameWidth()
             + self.model_tree.verticalScrollBar().sizeHint().width()
+            + margins.left()
+            + margins.right()
             + 16
         )
         self.splitter.setSizes([tree_width, max(1, self.width() - tree_width)])
-        self._refresh_result_tabs()
-        self._update_window_title()
+
+    def showEvent(self, event) -> None:
+        """Refit the tree once real widget geometry is available."""
+        super().showEvent(event)
+        if not event.spontaneous() and not self._tree_fitted_on_show:
+            self._tree_fitted_on_show = True
+            self._fit_tree_width()
 
     def _all_tree_items(self) -> list[QTreeWidgetItem]:
         """Return project tree items in depth-first display order."""
