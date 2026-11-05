@@ -31,6 +31,11 @@ def make_solver_and_layups():
 def test_worker_emits_results_progress_and_layup_messages(monkeypatch):
     """Collect one result per layup and emit ordered progress signals."""
     solver, layups, materials = make_solver_and_layups()
+    fluid = next(iter(materials.values()))
+    fluid.rho0 = 2.0
+    fluid.c0 = 300.0
+    solver.sending_fluid_id = fluid.id
+    solver.angle_deg = 35.0
     monkeypatch.setattr(
         solver,
         "run",
@@ -60,6 +65,8 @@ def test_worker_emits_results_progress_and_layup_messages(monkeypatch):
         "Second",
     ]
     assert np.allclose(results[0].frequencies, [100.0, 316.227766, 1000.0])
+    assert results[0].reference_impedance == 600.0
+    assert results[0].angle_deg == 35.0
 
 
 def test_worker_checks_cancel_between_layups(monkeypatch):

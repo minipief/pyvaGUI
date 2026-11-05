@@ -25,6 +25,33 @@ view, defaulting to magnitude and phase. Run starts the Phase 12 worker;
 the matching `ResultSet` is drawn when the GUI receives the finished
 signal. Export uses the existing CSV and PNG/SVG services.
 
+Left-click a y-axis label, ticks, or spine to cycle its display variant.
+Each impedance subplot cycles independently; checkbox changes preserve
+the selected variants. Every x-axis remains logarithmic frequency in Hz.
+CSV exports use the displayed variants, and image exports retain the
+displayed labels and units.
+
+Absorption cycles through coefficient, percent, reflected energy
+`1 - alpha`, reflection magnitude `sqrt(1 - alpha)`, and reflection
+attenuation `-10 log10(1 - alpha)` in dB. These reflection conversions
+assume no transmitted energy; for diffuse data they describe effective
+energy-derived values, not an angle-resolved complex reflection factor.
+Transmission cycles through coefficient, percent, sound reduction index
+`R = -10 log10(tau)`, and transmission level `-R`.
+
+Impedance supports magnitude, phase in degrees, real and imaginary parts,
+normalized magnitude/real/imaginary parts, admittance magnitude/real/
+imaginary parts, reflection magnitude/phase, and derived absorption.
+The result snapshots the sending fluid's `Z0 = rho0*c0` and incidence
+angle. Normalized impedance is `Z/Z0`, admittance is `1/Z`, reflection
+is `(Z*cos(theta) - Z0)/(Z*cos(theta) + Z0)`, and derived absorption is
+`1 - abs(r)**2`. Fluid-dependent views are omitted when that snapshot
+is unavailable. Zero transmission or reflection can give infinite dB;
+invalid square-root/logarithm inputs remain NaN rather than being clipped.
+
+Single-number ratings (alpha_w, NRC, Rw, STC) are not frequency-axis
+variants and are not calculated by this display feature.
+
 ## Concepts used
 
 See `pyqt_primer.md`: FigureCanvasQTAgg, Matplotlib figures, and

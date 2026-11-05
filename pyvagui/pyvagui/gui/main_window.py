@@ -898,6 +898,8 @@ class MainWindow(QMainWindow):
             frequencies=np.asarray(metadata["frequencies"], dtype=float),
             labels=metadata["labels"],
             results=self._calculation_results,
+            reference_impedance=metadata.get("reference_impedance"),
+            angle_deg=metadata.get("angle_deg", 0.0),
         )
 
     def _on_calculation_process_error(

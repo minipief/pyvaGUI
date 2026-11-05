@@ -776,6 +776,10 @@ def test_complex_result_round_trips_from_calculation_process(qtbot):
     """Preserve complex impedance values across the process boundary."""
     project, solver = make_solver_project()
     solver.solver_type = SolverType.IMPEDANCE
+    solver.angle_deg = 30.0
+    fluid = project.materials[0]
+    fluid.rho0 = 1.5
+    fluid.c0 = 320.0
     window = MainWindow(project)
     qtbot.addWidget(window)
 
@@ -785,10 +789,15 @@ def test_complex_result_round_trips_from_calculation_process(qtbot):
         timeout=15000,
     )
 
-    values = window.result_sets[solver.id].results[0].values
+    result = window.result_sets[solver.id]
+    values = result.results[0].values
     assert values.shape == (solver.frequencies.n_points,)
     assert np.iscomplexobj(values)
     assert np.all(np.isfinite(values))
+    assert result.reference_impedance == 480.0
+    assert result.angle_deg == 30.0
+    assert "normalized_magnitude" in result.display_views()
+    assert "reflection_phase" in result.display_views()
 
 
 def test_real_calculation_keeps_gui_timer_responsive(qtbot):

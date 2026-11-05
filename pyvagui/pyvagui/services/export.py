@@ -34,9 +34,8 @@ def export_csv(
 ) -> None:
     """Write frequencies and selected layup views to a CSV file.
 
-    View names are ``value``, ``magnitude``, ``phase``, ``real``, and
-    ``imaginary``. Phase is written in degrees. Complex results require
-    an explicit view other than ``value``.
+    Views include the solver's display variants. Phase is written in
+    degrees. Complex results require an explicit view other than ``value``.
 
     Parameters
     ----------
@@ -56,7 +55,14 @@ def export_csv(
     if not views:
         raise ValueError("Select at least one result view.")
     for view in views:
-        if view not in _VIEW_LABELS:
+        if view == "value" and any(
+            np.iscomplexobj(result.values) for result in result_set.results
+        ):
+            raise ValueError(
+                "Complex results require an explicit magnitude, "
+                "phase, real, or imaginary view."
+            )
+        if view not in result_set.display_views():
             raise ValueError(f"Unknown result view: {view}")
 
     frequencies = np.asarray(result_set.frequencies)
@@ -78,8 +84,9 @@ def export_csv(
                     "Complex results require an explicit magnitude, "
                     "phase, real, or imaginary view."
                 )
-            columns.append(_values_for_view(values, view))
-            header.append(f"{result.layup_name} | {_VIEW_LABELS[view]}")
+            columns.append(result_set.display_values(values, view))
+            label = _VIEW_LABELS.get(view, result_set.display_views()[view])
+            header.append(f"{result.layup_name} | {label}")
 
     with Path(path).open("w", encoding="utf-8", newline="") as file:
         writer = csv.writer(file)
@@ -110,29 +117,3 @@ def export_image(figure: Figure, path: str | Path) -> None:
     if image_format not in ("png", "svg"):
         raise ValueError("Image export supports only PNG and SVG files.")
     figure.savefig(target, format=image_format)
-
-
-def _values_for_view(values: np.ndarray, view: str) -> np.ndarray:
-    """Extract one real-valued view from a result array.
-
-    Parameters
-    ----------
-    values : numpy.ndarray
-        One-dimensional real or complex result values.
-    view : str
-        View identifier from ``_VIEW_LABELS``.
-
-    Returns
-    -------
-    numpy.ndarray
-        Real-valued view, with phase expressed in degrees.
-    """
-    if view == "value":
-        return np.real(values)
-    if view == "magnitude":
-        return np.abs(values)
-    if view == "phase":
-        return np.angle(values, deg=True)
-    if view == "real":
-        return np.real(values)
-    return np.imag(values)
