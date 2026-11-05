@@ -72,6 +72,132 @@ def test_real_result_tab_plots_layups_on_log_frequency_axis(qtbot):
     assert not tab.export_button.icon().isNull()
 
 
+@pytest.mark.parametrize("solver_type", [
+    SolverType.ABSORPTION, SolverType.ABSORPTION_DIFFUSE,
+])
+def test_absorption_y_axis_click_cycles_display_variants(qtbot, solver_type):
+    tab = ResultTab(make_solver(solver_type), lambda: None)
+    qtbot.addWidget(tab)
+    tab.set_results(make_result_set(
+        solver_type, [np.array([0.2, 0.5, 0.8])],
+    ))
+    expected = [
+        ("Absorption coefficient [%]", [20, 50, 80]),
+        ("Reflection coefficient 1 - alpha [-]", [0.8, 0.5, 0.2]),
+        ("Reflection magnitude |r| [-]", np.sqrt([0.8, 0.5, 0.2])),
+        ("Reflection attenuation [dB]", -10 * np.log10([0.8, 0.5, 0.2])),
+        ("Absorption coefficient [-]", [0.2, 0.5, 0.8]),
+    ]
+    for label, values in expected:
+        bounds = tab.axes[0].yaxis.label.get_window_extent(
+            tab.canvas.get_renderer()
+        )
+        event = MouseEvent(
+            "button_press_event", tab.canvas,
+            (bounds.x0 + bounds.x1) / 2,
+            (bounds.y0 + bounds.y1) / 2, button=1,
+        )
+        tab.canvas.callbacks.process("button_press_event", event)
+        assert tab.axes[0].get_ylabel() == label
+        np.testing.assert_allclose(tab.axes[0].lines[0].get_ydata(), values)
+        assert tab.axes[0].get_xscale() == "log"
+
+
+@pytest.mark.parametrize("solver_type", [
+    SolverType.TRANSMISSION, SolverType.TRANSMISSION_DIFFUSE,
+    SolverType.TRANSMISSION_ALLARD,
+])
+def test_transmission_spine_click_cycles_variants(qtbot, solver_type):
+    tab = ResultTab(make_solver(solver_type), lambda: None)
+    qtbot.addWidget(tab)
+    result = make_result_set(solver_type, [np.array([1.0, 0.1, 0.01])])
+    tab.set_results(result)
+    views = list(result.display_views())
+    for view in views[1:] + views[:1]:
+        axis = tab.axes[0]
+        event = MouseEvent(
+            "button_press_event", tab.canvas, axis.bbox.x0,
+            (axis.bbox.y0 + axis.bbox.y1) / 2, button=1,
+        )
+        tab.canvas.callbacks.process("button_press_event", event)
+        assert tab.axes[0].get_ylabel() == result.display_views()[view]
+        np.testing.assert_allclose(
+            tab.axes[0].lines[0].get_ydata(),
+            result.display_values(result.results[0].values, view),
+        )
+        assert tab.axes[0].get_xscale() == "log"
+
+
+def test_impedance_axis_cycles_independently_and_preserves_selection(qtbot):
+    tab = ResultTab(make_solver(SolverType.IMPEDANCE), lambda: None)
+    qtbot.addWidget(tab)
+    result = make_result_set(
+        SolverType.IMPEDANCE, [np.array([400 + 100j, 800 + 0j, 200j])],
+    )
+    result.reference_impedance = 400.0
+    result.angle_deg = 60.0
+    tab.set_results(result)
+    views = list(result.display_views())
+    for view in views[1:] + views[:1]:
+        axis = tab.axes[0]
+        bounds = axis.yaxis.label.get_window_extent(tab.canvas.get_renderer())
+        event = MouseEvent(
+            "button_press_event", tab.canvas,
+            (bounds.x0 + bounds.x1) / 2,
+            (bounds.y0 + bounds.y1) / 2, button=1,
+        )
+        tab.canvas.callbacks.process("button_press_event", event)
+        assert tab.axes[0].get_ylabel() == result.display_views()[view]
+        np.testing.assert_allclose(
+            tab.axes[0].lines[0].get_ydata(),
+            result.display_values(result.results[0].values, view),
+        )
+        assert tab.axes[1].get_ylabel() == "Impedance phase [deg]"
+    tab._display_views["magnitude"] = "normalized_real"
+    tab.view_checkboxes["real"].setChecked(True)
+    assert tab.axes[0].get_ylabel() == (
+        result.display_views()["normalized_real"]
+    )
+
+
+def test_plot_click_does_not_change_display(qtbot):
+    tab = ResultTab(make_solver(SolverType.ABSORPTION), lambda: None)
+    qtbot.addWidget(tab)
+    tab.set_results(make_result_set(
+        SolverType.ABSORPTION, [np.array([0.2, 0.5, 0.8])],
+    ))
+    axis = tab.axes[0]
+    event = MouseEvent(
+        "button_press_event", tab.canvas,
+        *axis.transData.transform((1000.0, 0.5)), button=1,
+    )
+    tab.canvas.callbacks.process("button_press_event", event)
+    assert tab.axes[0] is axis
+    assert not tab._display_views
+
+
+def test_csv_export_uses_axis_display_variant(qtbot, monkeypatch, tmp_path):
+    tab = ResultTab(make_solver(SolverType.TRANSMISSION), lambda: None)
+    qtbot.addWidget(tab)
+    tab.set_results(make_result_set(
+        SolverType.TRANSMISSION, [np.array([1.0, 0.1, 0.01])],
+    ))
+    tab._display_views["value"] = "transmission_loss"
+    tab.redraw()
+    path = tmp_path / "loss.csv"
+    monkeypatch.setattr(
+        QFileDialog, "getSaveFileName",
+        lambda *args: (str(path), "CSV (*.csv)"),
+    )
+    tab.export_results()
+    with path.open(encoding="utf-8", newline="") as file:
+        rows = list(csv.reader(file))
+    assert rows[0][1] == "Glass wool | Sound reduction index R [dB]"
+    np.testing.assert_allclose(
+        [float(row[1]) for row in rows[1:]], [0, 10, 20],
+    )
+
+
 def test_complex_result_tab_defaults_to_magnitude_and_phase(qtbot):
     """Create one subplot for each selected impedance view."""
     tab = ResultTab(make_solver(SolverType.IMPEDANCE), lambda: None)
@@ -92,7 +218,8 @@ def test_complex_result_tab_defaults_to_magnitude_and_phase(qtbot):
     assert not tab.view_checkboxes["real"].isChecked()
     assert len(tab.axes) == 2
     assert all(axis.get_xscale() == "log" for axis in tab.axes)
-    assert all(axis.get_ylabel() == "Impedance [Pa s/m]" for axis in tab.axes)
+    assert tab.axes[0].get_ylabel() == "Impedance magnitude |Z| [Pa s/m]"
+    assert tab.axes[1].get_ylabel() == "Impedance phase [deg]"
     assert tab.axes[0].get_title() == "Magnitude"
     assert tab.axes[1].get_title() == "Phase"
 

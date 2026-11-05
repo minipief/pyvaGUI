@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 
 from pyvagui.gui.tree_icons import ACTION_ICONS
 from pyvagui.model.results import ResultSet
-from pyvagui.model.solvers import SolverSpec, SolverType
+from pyvagui.model.solvers import SolverSpec
 from pyvagui.services.export import export_csv, export_image
 
 
@@ -64,10 +64,13 @@ class ResultTab(QWidget):
         self.axes = []
         self._data_lines = {}
         self._hover_artists = {}
+        self._display_views = {}
+        self._axis_views = {}
         self.canvas.mpl_connect(
             "motion_notify_event",
             self._on_plot_hover,
         )
+        self.canvas.mpl_connect("button_press_event", self._on_axis_click)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
@@ -142,6 +145,7 @@ class ResultTab(QWidget):
         self.axes = []
         self._data_lines = {}
         self._hover_artists = {}
+        self._axis_views = {}
         if not views:
             self.figure.text(
                 0.5,
@@ -161,6 +165,12 @@ class ResultTab(QWidget):
         self.axes = [axes_grid[index][0] for index in range(len(views))]
         frequencies = self.result_set.frequencies
         for axis, view in zip(self.axes, views):
+            slot = view
+            view = self._display_views.get(slot, view)
+            if view not in self.result_set.display_views():
+                view = slot
+                self._display_views.pop(slot, None)
+            self._axis_views[axis] = slot
             self._data_lines[axis] = []
             for layup_result in self.result_set.results:
                 values = self._values_for_view(layup_result.values, view)
@@ -173,7 +183,7 @@ class ResultTab(QWidget):
                 self._data_lines[axis].append(line)
             axis.set_xscale("log")
             axis.set_xlabel("Frequency [Hz]")
-            axis.set_ylabel(self._y_axis_label())
+            axis.set_ylabel(self.result_set.display_views()[view])
             axis.grid(True, which="both", alpha=0.25)
             axis.legend()
             annotation = axis.annotate(
@@ -203,9 +213,38 @@ class ResultTab(QWidget):
             )
             self._hover_artists[axis] = (annotation, marker)
             if self.solver.is_complex():
-                axis.set_title(dict(COMPLEX_VIEWS)[view])
+                axis.set_title(
+                    dict(COMPLEX_VIEWS).get(
+                        view, self.result_set.display_views()[view]
+                    )
+                )
         self.figure.tight_layout()
         self.canvas.draw()
+
+    def _on_axis_click(self, event) -> None:
+        """Cycle the clicked y-axis label, ticks, or spine independently."""
+        if self.result_set is None or event.button != 1:
+            return
+        if self.canvas.widgetlock.locked():
+            return
+        renderer = self.canvas.get_renderer()
+        for axis, slot in self._axis_views.items():
+            bounds = axis.yaxis.get_tightbbox(renderer)
+            on_axis = bounds is not None and bounds.padded(5).contains(
+                event.x, event.y
+            )
+            on_spine = (
+                abs(event.x - axis.bbox.x0) <= 5
+                and axis.bbox.y0 <= event.y <= axis.bbox.y1
+            )
+            if on_axis or on_spine:
+                views = list(self.result_set.display_views())
+                current = self._display_views.get(slot, slot)
+                self._display_views[slot] = views[
+                    (views.index(current) + 1) % len(views)
+                ]
+                self.redraw()
+                return
 
     def _on_plot_hover(self, event) -> None:
         """Show the nearest curve's value while the pointer is over it."""
@@ -312,7 +351,8 @@ class ResultTab(QWidget):
                 export_csv(
                     self.result_set,
                     target,
-                    self._selected_views(),
+                    [self._display_views.get(view, view)
+                     for view in self._selected_views()],
                 )
         except (OSError, ValueError) as error:
             QMessageBox.critical(self, "Export results", str(error))
@@ -345,23 +385,6 @@ class ResultTab(QWidget):
         numpy.ndarray
             Values to plot on the vertical axis.
         """
-        if view == "magnitude":
-            return np.abs(values)
-        if view == "phase":
-            return np.angle(values, deg=True)
-        if view == "real":
-            return np.real(values)
-        if view == "imaginary":
-            return np.imag(values)
+        if self.result_set is not None:
+            return self.result_set.display_values(values, view)
         return np.real(values)
-
-    def _y_axis_label(self) -> str:
-        """Return the physical y-axis label for the solver preset."""
-        if self.solver.solver_type in (
-            SolverType.ABSORPTION,
-            SolverType.ABSORPTION_DIFFUSE,
-        ):
-            return "Absorption coefficient [-]"
-        if self.solver.solver_type is SolverType.IMPEDANCE:
-            return "Impedance [Pa s/m]"
-        return "Transmission coefficient tau [-]"

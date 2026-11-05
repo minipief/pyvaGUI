@@ -5,7 +5,7 @@ from copy import deepcopy
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from pyvagui.model.layup import Layup
-from pyvagui.model.materials import MaterialSpec
+from pyvagui.model.materials import FluidSpec, MaterialSpec
 from pyvagui.model.results import LayupResult, ResultSet
 from pyvagui.model.solvers import SolverSpec
 
@@ -52,6 +52,11 @@ class CalculationWorker(QObject):
         self.layups = deepcopy(layups)
         self.materials = deepcopy(materials)
         self.cancel_requested = False
+        sending_fluid = self.materials.get(self.solver.sending_fluid_id)
+        self.reference_impedance = (
+            sending_fluid.rho0 * sending_fluid.c0
+            if isinstance(sending_fluid, FluidSpec) else None
+        )
 
     @pyqtSlot()
     def run(self) -> None:
@@ -89,6 +94,8 @@ class CalculationWorker(QObject):
             frequencies=frequencies,
             labels=labels,
             results=results,
+            reference_impedance=self.reference_impedance,
+            angle_deg=self.solver.angle_deg,
         )
         self.finished.emit(result_set)
 

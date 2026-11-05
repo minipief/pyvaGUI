@@ -73,6 +73,8 @@ def main(payload_path: str | Path, message_path: str | Path) -> int:
                 "solver_type": worker.solver.solver_type.value,
                 "frequencies": frequencies.tolist(),
                 "labels": worker.solver.frequencies.labels(),
+                "reference_impedance": worker.reference_impedance,
+                "angle_deg": worker.solver.angle_deg,
             })
             worker.layup_result.connect(_send_layup_result)
             worker.layup_finished.connect(
