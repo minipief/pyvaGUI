@@ -1,6 +1,7 @@
 """Main application window and project-management interface."""
 
 from datetime import datetime
+from copy import deepcopy
 import json
 from pathlib import Path
 import sys
@@ -38,11 +39,12 @@ from pyvagui.gui.theme import (
     resize_to_screen,
 )
 from pyvagui.gui.tree_icons import ACTION_ICONS, TREE_ICONS
+from pyvagui.model.layup import Layup
 from pyvagui.model.library import MaterialLibrary
-from pyvagui.model.materials import PoroElasticMatSpec
+from pyvagui.model.materials import MaterialSpec, PoroElasticMatSpec, new_id
 from pyvagui.model.project import Project
 from pyvagui.model.results import LayupResult, ResultSet
-from pyvagui.model.solvers import SolverType
+from pyvagui.model.solvers import SolverSpec, SolverType
 
 
 class MainWindow(QMainWindow):
@@ -59,6 +61,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setStyleSheet(STYLE_SHEET)
         self.project = project if project is not None else Project()
+        self._clipboard_objects: list[
+            tuple[str, MaterialSpec | Layup | SolverSpec]
+        ] = []
         self.material_library: MaterialLibrary | None = None
         self.calculation_process: QProcess | None = None
         self._calculation_temp_dir: tempfile.TemporaryDirectory | None = None
@@ -240,6 +245,27 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(self.new_layup_action)
         edit_menu.addAction(self.new_solver_action)
         edit_menu.addSeparator()
+        self.copy_project_items_action = QAction(
+            "Copy selected items",
+            self.model_tree,
+        )
+        self.copy_project_items_action.setShortcut("Ctrl+C")
+        self.copy_project_items_action.setShortcutContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+        self.model_tree.addAction(self.copy_project_items_action)
+        edit_menu.addAction(self.copy_project_items_action)
+        self.paste_project_items_action = QAction(
+            "Paste items",
+            self.model_tree,
+        )
+        self.paste_project_items_action.setShortcut("Ctrl+V")
+        self.paste_project_items_action.setShortcutContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+        self.model_tree.addAction(self.paste_project_items_action)
+        edit_menu.addAction(self.paste_project_items_action)
+        edit_menu.addSeparator()
         self.delete_project_item_action = QAction(
             "Delete selected items", self
         )
@@ -252,6 +278,12 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(self.delete_project_item_action)
         self.delete_project_item_action.triggered.connect(
             self.delete_selected_project_items
+        )
+        self.copy_project_items_action.triggered.connect(
+            self.copy_selected_project_items
+        )
+        self.paste_project_items_action.triggered.connect(
+            self.paste_project_items
         )
         self._update_delete_action()
         self.new_material_action.triggered.connect(self.add_new_material)
@@ -372,6 +404,7 @@ class MainWindow(QMainWindow):
         self._fit_tree_width()
         self._refresh_result_tabs()
         self._update_window_title()
+        self._update_delete_action()
 
     def _fit_tree_width(self) -> None:
         """Widen the navigation panel so every tree label is fully visible."""
@@ -491,8 +524,15 @@ class MainWindow(QMainWindow):
     def _update_delete_action(self) -> None:
         """Enable deletion only for selected project objects when idle."""
         has_selection = bool(self._selected_project_ids())
+        can_edit = not self._calculation_busy
         self.delete_project_item_action.setEnabled(
-            has_selection and not self._calculation_busy
+            has_selection and can_edit
+        )
+        self.copy_project_items_action.setEnabled(
+            has_selection and can_edit
+        )
+        self.paste_project_items_action.setEnabled(
+            bool(self._clipboard_objects) and can_edit
         )
 
     def _show_project_tree_context_menu(self, position) -> None:
@@ -508,8 +548,63 @@ class MainWindow(QMainWindow):
             return
         menu = QMenu(self)
         make_rounded_popup(menu)
+        menu.addAction(self.copy_project_items_action)
+        menu.addAction(self.paste_project_items_action)
+        menu.addSeparator()
         menu.addAction(self.delete_project_item_action)
         menu.exec(self.model_tree.viewport().mapToGlobal(position))
+
+    def copy_selected_project_items(self) -> bool:
+        """Copy selected materials, layups, and solvers to an internal buffer."""
+        selected_ids = self._selected_project_ids()
+        if not selected_ids or self._calculation_busy:
+            return False
+        self._clipboard_objects = [
+            (kind, deepcopy(item))
+            for kind, collection in (
+                ("material", self.project.materials),
+                ("layup", self.project.layups),
+                ("solver", self.project.solvers),
+            )
+            for item in collection
+            if item.id in selected_ids
+        ]
+        self._update_delete_action()
+        return bool(self._clipboard_objects)
+
+    def paste_project_items(self) -> bool:
+        """Add independent, newly identified copies of buffered items."""
+        if not self._clipboard_objects or self._calculation_busy:
+            return False
+        existing_names = {
+            "material": {item.name for item in self.project.materials},
+            "layup": {item.name for item in self.project.layups},
+            "solver": {item.name for item in self.project.solvers},
+        }
+        for kind, original in self._clipboard_objects:
+            item = deepcopy(original)
+            item.id = new_id()
+            item.name = self._copy_name(item.name, existing_names[kind])
+            existing_names[kind].add(item.name)
+            if kind == "material":
+                self.project.add_material(item)
+            elif kind == "layup":
+                self.project.add_layup(item)
+            else:
+                self.project.add_solver(item)
+        self.refresh_project_view()
+        self.log("INFO", "Pasted copies of the selected project items.")
+        return True
+
+    @staticmethod
+    def _copy_name(name: str, existing_names: set[str]) -> str:
+        """Return a readable copy name that is unique within its category."""
+        candidate = f"{name} (copy)"
+        suffix = 2
+        while candidate in existing_names:
+            candidate = f"{name} (copy {suffix})"
+            suffix += 1
+        return candidate
 
     def delete_selected_project_items(self) -> bool:
         """Delete selected items unless surviving objects reference them.
@@ -1205,6 +1300,7 @@ class MainWindow(QMainWindow):
         if not self._confirm_discard_changes():
             return
         self.project = Project()
+        self._clipboard_objects.clear()
         self.refresh_project_view()
         self.log("INFO", "Created a new project.")
 
@@ -1242,6 +1338,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Open project", str(error))
             return False
         self.project = project
+        self._clipboard_objects.clear()
         self.refresh_project_view()
         self.log(
             "INFO",

@@ -133,6 +133,7 @@ class BoundaryCondition(Enum):
     """Termination used at the receiving side of a model."""
 
     FIXED = "fixed"
+    FREE = "free"
     EQUIVALENT_FLUID = "equivalent_fluid"
 
 
@@ -312,14 +313,21 @@ class SolverSpec:
 
         angle = self._angle_radians()
         sending_spec = materials.get(self.sending_fluid_id)
-        receiving_spec = materials.get(self.receiving_fluid_id)
         if not isinstance(sending_spec, FluidSpec):
             raise ValueError("Sending material must be a project FluidSpec.")
-        if not isinstance(receiving_spec, FluidSpec):
-            raise ValueError("Receiving material must be a project FluidSpec.")
-
         sending_fluid = sending_spec.to_pyva(materials)
-        receiving_fluid = receiving_spec.to_pyva(materials)
+        receiving_fluid = None
+        needs_receiving_fluid = (
+            self.solver_type is not SolverType.IMPEDANCE
+            or self.boundary_condition is BoundaryCondition.EQUIVALENT_FLUID
+        )
+        if needs_receiving_fluid:
+            receiving_spec = materials.get(self.receiving_fluid_id)
+            if not isinstance(receiving_spec, FluidSpec):
+                raise ValueError(
+                    "Receiving material must be a project FluidSpec."
+                )
+            receiving_fluid = receiving_spec.to_pyva(materials)
         omega = self.frequencies.omega()
         model = layup.build_tmmodel(materials)
         kx = sending_fluid.wavenumber(omega) * math.sin(angle)
@@ -376,7 +384,12 @@ class SolverSpec:
                     kx,
                     boundary_condition=self.boundary_condition.value,
                     signal=False,
-                    out_fluid=receiving_fluid,
+                    **(
+                        {"out_fluid": receiving_fluid}
+                        if self.boundary_condition
+                        is BoundaryCondition.EQUIVALENT_FLUID
+                        else {}
+                    ),
                 )
             case _:
                 message = f"Unsupported solver type: {self.solver_type!r}."
@@ -413,15 +426,26 @@ class SolverSpec:
                 errors.append(f"Selected layup '{layup_id}' does not exist.")
 
         materials = project.materials_by_id()
-        for label, material_id in (
-            ("Sending", self.sending_fluid_id),
-            ("Receiving", self.receiving_fluid_id),
-        ):
+        for label, material_id in (("Sending", self.sending_fluid_id),):
             material = materials.get(material_id)
             if material is None:
                 errors.append(f"{label} fluid does not exist in the project.")
             elif not isinstance(material, FluidSpec):
                 errors.append(f"{label} material must be a FluidSpec.")
+
+        if self.solver_type is SolverType.IMPEDANCE:
+            if self.boundary_condition is BoundaryCondition.EQUIVALENT_FLUID:
+                self._validate_receiving_fluid(materials, errors)
+            elif self.receiving_fluid_id:
+                errors.append(
+                    "Select either a boundary condition or a receiving fluid."
+                )
+        else:
+            if self.boundary_condition is BoundaryCondition.FREE:
+                errors.append(
+                    "Free boundary condition is only valid for impedance."
+                )
+            self._validate_receiving_fluid(materials, errors)
 
         errors.extend(
             f"Frequency settings: {error}"
@@ -429,6 +453,18 @@ class SolverSpec:
         )
         errors.extend(self._angle_errors())
         return errors
+
+    def _validate_receiving_fluid(
+        self,
+        materials: dict[str, MaterialSpec],
+        errors: list[str],
+    ) -> None:
+        """Append errors when the selected receiving fluid is invalid."""
+        material = materials.get(self.receiving_fluid_id)
+        if material is None:
+            errors.append("Receiving fluid does not exist in the project.")
+        elif not isinstance(material, FluidSpec):
+            errors.append("Receiving material must be a FluidSpec.")
 
     def to_dict(self) -> dict:
         """Convert the solver configuration to JSON-ready values.

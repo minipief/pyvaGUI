@@ -3,6 +3,7 @@
 import copy
 import math
 from dataclasses import fields
+from typing import get_type_hints
 
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -234,6 +235,7 @@ class MaterialEditorDialog(QDialog):
         while self.properties_layout.rowCount():
             self.properties_layout.removeRow(0)
         self.field_widgets.clear()
+        self.material_field_types = get_type_hints(type(self.material_spec))
         self.error_label.hide()
         type_label = next(
             label
@@ -278,7 +280,8 @@ class MaterialEditorDialog(QDialog):
             Input widget initialized from the working copy.
         """
         value = getattr(self.material_spec, material_field.name)
-        if material_field.type is bool:
+        field_type = self.material_field_types[material_field.name]
+        if field_type is bool:
             checkbox = QCheckBox(self.properties_group)
             checkbox.setChecked(value)
             return checkbox
@@ -309,7 +312,7 @@ class MaterialEditorDialog(QDialog):
                 combo.setCurrentIndex(index)
             return combo
         line_edit = QLineEdit(str(value), self.properties_group)
-        if material_field.type is float:
+        if field_type is float:
             line_edit.setPlaceholderText("Enter value")
         return line_edit
 
@@ -322,11 +325,12 @@ class MaterialEditorDialog(QDialog):
             if name in ("name", "id"):
                 continue
             widget = self.field_widgets[name]
-            if material_field.type is bool:
+            field_type = self.material_field_types[name]
+            if field_type is bool:
                 setattr(self.material_spec, name, widget.isChecked())
             elif name == "solid_mat_id":
                 setattr(self.material_spec, name, widget.currentData())
-            elif material_field.type is float:
+            elif field_type is float:
                 value = parse_float(widget.text())
                 if value is None:
                     errors.append(

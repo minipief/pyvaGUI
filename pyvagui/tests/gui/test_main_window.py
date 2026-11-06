@@ -238,6 +238,60 @@ def test_project_tree_uses_distinct_icons_for_each_object_type(qtbot):
     assert layup_item.icon(0).cacheKey() != solver_item.icon(0).cacheKey()
 
 
+def test_copy_paste_duplicates_selected_materials_layups_and_solvers(qtbot):
+    """Duplicate selected project items with new IDs and unique names."""
+    air = FluidSpec(name="Air")
+    layup = Layup(
+        name="Air layer",
+        layers=[
+            LayerSpec(
+                material_id=air.id,
+                thickness=0.02,
+                layer_type=LayerType.FLUID,
+            )
+        ],
+    )
+    solver = SolverSpec(
+        name="Absorption",
+        solver_type=SolverType.ABSORPTION,
+        frequencies=FrequencySettings(
+            f_start=100.0,
+            f_end=10000.0,
+            n_points=11,
+        ),
+        sending_fluid_id=air.id,
+        receiving_fluid_id=air.id,
+        layup_ids=[layup.id],
+    )
+    project = Project(materials=[air], layups=[layup], solvers=[solver])
+    window = MainWindow(project)
+    qtbot.addWidget(window)
+    window.model_tree.topLevelItem(0).setSelected(True)
+    window.model_tree.topLevelItem(1).setSelected(True)
+    window.model_tree.topLevelItem(2).setSelected(True)
+
+    assert window.copy_selected_project_items()
+    assert window.paste_project_items()
+
+    material_copy = project.materials[1]
+    layup_copy = project.layups[1]
+    solver_copy = project.solvers[1]
+    assert material_copy.name == "Air (copy)"
+    assert layup_copy.name == "Air layer (copy)"
+    assert solver_copy.name == "Absorption (copy)"
+    assert material_copy.id != air.id
+    assert layup_copy.id != layup.id
+    assert solver_copy.id != solver.id
+    assert layup_copy.layers[0].material_id == air.id
+    assert solver_copy.layup_ids == [layup.id]
+    assert project.is_modified
+
+    assert window.paste_project_items()
+    assert project.materials[2].name == "Air (copy 2)"
+    assert project.layups[2].name == "Air layer (copy 2)"
+    assert project.solvers[2].name == "Absorption (copy 2)"
+
+
 def test_delete_materials_from_selected_project_folder(
     qtbot, monkeypatch
 ):

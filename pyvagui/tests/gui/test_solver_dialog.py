@@ -146,6 +146,47 @@ def test_diffuse_solver_saves_maximum_angle(qtbot):
     assert dialog.result_solver.solver_type is SolverType.TRANSMISSION_DIFFUSE
 
 
+def test_impedance_uses_either_boundary_or_receiving_fluid(qtbot):
+    """Keep the impedance termination mutually exclusive in the form."""
+    project, air, water, layup = make_project()
+    dialog = SolverEditorDialog(project)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.solver_type_combo.setCurrentIndex(
+        dialog.solver_type_combo.findData(SolverType.IMPEDANCE)
+    )
+    fill_valid_solver(dialog, air, water, layup)
+
+    assert dialog.receiving_fluid_combo.isHidden()
+    dialog.impedance_termination_combo.setCurrentIndex(
+        dialog.impedance_termination_combo.findData(
+            BoundaryCondition.EQUIVALENT_FLUID
+        )
+    )
+    assert dialog.receiving_fluid_combo.isVisible()
+    dialog.save_solver()
+
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    assert dialog.result_solver.boundary_condition is (
+        BoundaryCondition.EQUIVALENT_FLUID
+    )
+    assert dialog.result_solver.receiving_fluid_id == water.id
+
+    fixed_dialog = SolverEditorDialog(project)
+    qtbot.addWidget(fixed_dialog)
+    fixed_dialog.solver_type_combo.setCurrentIndex(
+        fixed_dialog.solver_type_combo.findData(SolverType.IMPEDANCE)
+    )
+    fill_valid_solver(fixed_dialog, air, water, layup)
+    fixed_dialog.save_solver()
+
+    assert fixed_dialog.result() == QDialog.DialogCode.Accepted
+    assert fixed_dialog.result_solver.boundary_condition is (
+        BoundaryCondition.FIXED
+    )
+    assert fixed_dialog.result_solver.receiving_fluid_id == ""
+
+
 def test_solver_invalid_values_show_all_errors_and_keep_dialog_open(
     qtbot,
     monkeypatch,

@@ -96,8 +96,15 @@ class SolverEditorDialog(QDialog):
         fluids_form = QFormLayout(fluids_group)
         self.sending_fluid_combo = self._make_fluid_combo()
         self.receiving_fluid_combo = self._make_fluid_combo()
+        self.receiving_fluid_label = QLabel(
+            "Receiving fluid",
+            fluids_group,
+        )
         fluids_form.addRow("Sending fluid", self.sending_fluid_combo)
-        fluids_form.addRow("Receiving fluid", self.receiving_fluid_combo)
+        fluids_form.addRow(
+            self.receiving_fluid_label,
+            self.receiving_fluid_combo,
+        )
         layout.addWidget(fluids_group)
 
         self.incidence_group = QGroupBox(self)
@@ -145,6 +152,23 @@ class SolverEditorDialog(QDialog):
             BoundaryCondition.EQUIVALENT_FLUID,
         )
         boundary_form.addRow("Receiving side", self.boundary_combo)
+        self.impedance_termination_combo = QComboBox(boundary_group)
+        self.impedance_termination_combo.addItem(
+            "Fixed (hard wall)",
+            BoundaryCondition.FIXED,
+        )
+        self.impedance_termination_combo.addItem(
+            "Free",
+            BoundaryCondition.FREE,
+        )
+        self.impedance_termination_combo.addItem(
+            "Receiving fluid",
+            BoundaryCondition.EQUIVALENT_FLUID,
+        )
+        boundary_form.addRow(
+            "Impedance receiving side",
+            self.impedance_termination_combo,
+        )
         layout.addWidget(boundary_group)
 
         layups_group = QGroupBox("Layups", self)
@@ -179,6 +203,9 @@ class SolverEditorDialog(QDialog):
         self.solver_type_combo.currentIndexChanged.connect(
             self.update_angle_visibility
         )
+        self.impedance_termination_combo.currentIndexChanged.connect(
+            self._update_solver_controls
+        )
 
     def _make_fluid_combo(self) -> QComboBox:
         """Create a selector containing only project FluidSpec materials.
@@ -211,6 +238,11 @@ class SolverEditorDialog(QDialog):
         self.frequency_points_edit.setText(str(frequencies.n_points))
         self.boundary_combo.setCurrentIndex(
             self.boundary_combo.findData(
+                self.solver_spec.boundary_condition
+            )
+        )
+        self.impedance_termination_combo.setCurrentIndex(
+            self.impedance_termination_combo.findData(
                 self.solver_spec.boundary_condition
             )
         )
@@ -264,6 +296,22 @@ class SolverEditorDialog(QDialog):
         self.incidence_group.setTitle(
             "Diffuse incidence" if is_diffuse else "Incidence"
         )
+        self._update_solver_controls()
+
+    def _update_solver_controls(self, index: int = -1) -> None:
+        """Show only the receiving-side controls used by this preset."""
+        is_impedance = (
+            self.solver_type_combo.currentData() is SolverType.IMPEDANCE
+        )
+        uses_receiving_fluid = (
+            self.impedance_termination_combo.currentData()
+            is BoundaryCondition.EQUIVALENT_FLUID
+        )
+        self.boundary_combo.setVisible(not is_impedance)
+        self.impedance_termination_combo.setVisible(is_impedance)
+        show_receiving_fluid = not is_impedance or uses_receiving_fluid
+        self.receiving_fluid_label.setVisible(show_receiving_fluid)
+        self.receiving_fluid_combo.setVisible(show_receiving_fluid)
 
     def save_solver(self) -> None:
         """Read fields, validate against the project, and accept if valid."""
@@ -295,9 +343,21 @@ class SolverEditorDialog(QDialog):
         solver.solver_type = self.solver_type_combo.currentData()
         solver.angle_deg = angle_deg
         solver.max_angle_deg = max_angle_deg
-        solver.boundary_condition = self.boundary_combo.currentData()
+        solver.boundary_condition = (
+            self.impedance_termination_combo.currentData()
+            if solver.solver_type is SolverType.IMPEDANCE
+            else self.boundary_combo.currentData()
+        )
         solver.sending_fluid_id = self.sending_fluid_combo.currentData()
-        solver.receiving_fluid_id = self.receiving_fluid_combo.currentData()
+        solver.receiving_fluid_id = (
+            self.receiving_fluid_combo.currentData()
+            if (
+                solver.solver_type is not SolverType.IMPEDANCE
+                or solver.boundary_condition
+                is BoundaryCondition.EQUIVALENT_FLUID
+            )
+            else ""
+        )
         solver.frequencies = FrequencySettings(
             f_start=f_start,
             f_end=f_end,

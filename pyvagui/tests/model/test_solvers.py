@@ -70,7 +70,9 @@ def make_solver(
         max_angle_deg=78.0,
         boundary_condition=BoundaryCondition.FIXED,
         sending_fluid_id=air.id,
-        receiving_fluid_id=air.id,
+        receiving_fluid_id=(
+            "" if solver_type is SolverType.IMPEDANCE else air.id
+        ),
         layup_ids=[project.layups[0].id],
     )
 
@@ -186,6 +188,29 @@ def test_solver_validation_accepts_valid_project():
     assert make_solver(project).validate(project) == []
 
 
+def test_impedance_validation_requires_one_receiving_termination():
+    """Accept a wall condition or a receiving fluid, but not both."""
+    project = make_project()
+    solver = make_solver(project, SolverType.IMPEDANCE)
+
+    assert solver.validate(project) == []
+
+    solver.receiving_fluid_id = solver.sending_fluid_id
+    assert any(
+        "either a boundary condition or a receiving fluid" in error
+        for error in solver.validate(project)
+    )
+
+    solver.boundary_condition = BoundaryCondition.EQUIVALENT_FLUID
+    assert solver.validate(project) == []
+
+    solver.receiving_fluid_id = ""
+    assert any(
+        "Receiving fluid does not exist" in error
+        for error in solver.validate(project)
+    )
+
+
 def test_solver_validation_reports_missing_references_and_bad_fields():
     """Collect name, selection, reference, frequency, and angle errors."""
     project = make_project()
@@ -258,6 +283,33 @@ def test_run_performs_real_pyva_calculation(
     assert np.iscomplexobj(values) is complex_result
     if not complex_result:
         assert np.all((values >= 0) & (values <= 1))
+
+
+@pytest.mark.parametrize(
+    ("boundary_condition", "receiving_fluid"),
+    [
+        (BoundaryCondition.FIXED, False),
+        (BoundaryCondition.FREE, False),
+        (BoundaryCondition.EQUIVALENT_FLUID, True),
+    ],
+)
+def test_impedance_run_supports_each_receiving_termination(
+    boundary_condition: BoundaryCondition,
+    receiving_fluid: bool,
+) -> None:
+    """Run impedance using a boundary condition or fluid termination."""
+    project = make_project()
+    solver = make_solver(project, SolverType.IMPEDANCE)
+    solver.boundary_condition = boundary_condition
+    if receiving_fluid:
+        solver.receiving_fluid_id = solver.sending_fluid_id
+    materials = {material.id: material for material in project.materials}
+
+    values = solver.run(project.layups[0], materials)
+
+    assert values.shape == (solver.frequencies.n_points,)
+    assert np.all(np.isfinite(values))
+    assert np.iscomplexobj(values)
 
 
 def test_solver_run_rejects_missing_fluids():
