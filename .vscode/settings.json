@@ -1,0 +1,6 @@
+{
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.analysis.extraPaths": [
+        "C:\\pyvaGUI\\pyvaGUI\\pyvagui\\pyvagui"
+    ]
+}

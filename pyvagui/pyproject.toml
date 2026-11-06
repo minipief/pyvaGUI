@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "pyvagui"
 version = "0.1.0"
 description = "Graphical user interface for infinite layer calculations with pyva"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 license = { text = "GPL-3.0-or-later" }
 dependencies = [
     "PyQt6",
